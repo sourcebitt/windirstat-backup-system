@@ -57,6 +57,7 @@
 #include <vssym32.h>
 #include <dwmapi.h>
 #include <comdef.h>
+#include <shobjidl.h>
 #include <wbemidl.h>
 #include <initguid.h>
 #include <virtdisk.h>

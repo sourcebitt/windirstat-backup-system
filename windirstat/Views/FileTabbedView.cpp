@@ -18,6 +18,7 @@
 #include "pch.h"
 #include "FileTabbedView.h"
 #include "FileTreeView.h"
+#include "FileBackupControl.h"
 
 IMPLEMENT_DYNCREATE(CFileTabbedView, CTabView)
 
@@ -42,6 +43,8 @@ int CFileTabbedView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
     m_fileSearchView = DYNAMIC_DOWNCAST(CFileSearchView, GetTabControl().GetTabWnd(m_fileSearchViewIndex));
     m_fileWatcherViewIndex = AddView(RUNTIME_CLASS(CFileWatcherView), IDS_WATCHER.data(), CHAR_MAX);
     m_fileWatcherView = DYNAMIC_DOWNCAST(CFileWatcherView, GetTabControl().GetTabWnd(m_fileWatcherViewIndex));
+    m_fileBackupViewIndex = AddView(RUNTIME_CLASS(CFileBackupView), IDS_BACKUP_FILES.data(), CHAR_MAX);
+    m_fileBackupView = DYNAMIC_DOWNCAST(CFileBackupView, GetTabControl().GetTabWnd(m_fileBackupViewIndex));
 
     return 0;
 }
@@ -85,9 +88,13 @@ LRESULT CFileTabbedView::OnChangeActiveTab(WPARAM wp, LPARAM lp)
 {
     if (wp == static_cast<WPARAM>(m_fileDupeViewIndex))
     {
-        // Duplicate view can take a while to populate so show wait cursor
         CWaitCursor wc;
         CFileDupeControl::Get()->SortItems();
+    }
+    else if (wp == static_cast<WPARAM>(m_fileBackupViewIndex))
+    {
+        CWaitCursor wc;
+        CFileBackupControl::Get()->Populate();
     }
 
     return CTabView::OnChangeActiveTab(wp, lp);
@@ -96,7 +103,7 @@ LRESULT CFileTabbedView::OnChangeActiveTab(WPARAM wp, LPARAM lp)
 bool CFileTabbedView::CycleTab(const bool forward)
 {
     std::vector<int> visibleTabs;
-    for (const int tabIndex : { m_fileTreeViewIndex, m_fileTopViewIndex, m_fileDupeViewIndex, m_fileSearchViewIndex, m_fileWatcherViewIndex })
+    for (const int tabIndex : { m_fileTreeViewIndex, m_fileTopViewIndex, m_fileDupeViewIndex, m_fileSearchViewIndex, m_fileWatcherViewIndex, m_fileBackupViewIndex })
     {
         if (GetTabControl().IsTabVisible(tabIndex)) visibleTabs.push_back(tabIndex);
     }

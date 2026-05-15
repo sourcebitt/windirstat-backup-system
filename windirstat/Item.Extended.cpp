@@ -478,8 +478,8 @@ std::vector<CItem*> CItem::GetDriveItems() const
     {
         for (const auto& child : root->GetChildren())
         {
-            ASSERT(child->IsTypeOrFlag(IT_DRIVE));
-            drives.push_back(child);
+            if (child->IsTypeOrFlag(IT_DRIVE))
+                drives.push_back(child);
         }
     }
     else if (root->IsTypeOrFlag(IT_DRIVE))

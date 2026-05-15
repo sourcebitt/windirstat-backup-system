@@ -14,6 +14,7 @@
 #define IDD_SEARCH                      111
 #define IDD_PROGRESS                    112
 #define IDD_PAGE_PROMPTS                113
+#define IDD_MANAGE_SOURCE_FOLDERS       114
 #define IDR_MAINFRAME                   128
 #define IDR_POPUP_TREE                  129
 #define IDR_POPUP_MAP                   130
@@ -138,6 +139,9 @@
 #define IDC_HASH_ALGORITHM              1121
 #define IDC_FILTER_BUTTON               1122
 #define IDC_FILTERING_MAX_AGE_DAYS      1124
+#define IDC_SOURCE_FOLDERS_LIST         1126
+#define IDC_ADD_SOURCE_FOLDER           1127
+#define IDC_REMOVE_SOURCE_FOLDER        1128
 #define ID_WDS_CONTROL                  4711
 #define ID_TREEMAP_ZOOMRESET            32767
 #define ID_CLEANUP_EXPLORER_SELECT      32768
@@ -223,6 +227,7 @@
 #define ID_TREEMAP_SHOW_EXTENSIONS      32941
 #define ID_VIEW_LARGE_TOOLBAR           32942
 #define ID_FILTER_EXCLUDE_ITEM          32943
+#define ID_FILE_SCAN_BACKUP_SOURCES     32944
 #define IDS_AUTHOR_EMAIL                57345
 #define IDS_URL_WEBSITE                 57346
 #define IDS_URL_HELP                    57347
@@ -238,7 +243,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        306
 #define _APS_NEXT_COMMAND_VALUE         32943
-#define _APS_NEXT_CONTROL_VALUE         1123
+#define _APS_NEXT_CONTROL_VALUE         1129
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

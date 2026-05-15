@@ -28,21 +28,24 @@ public:
     bool IsFileTopViewTabActive() { return GetTabControl().GetActiveTab() == m_fileTopViewIndex; }
     bool IsFileSearchViewTabActive() { return GetTabControl().GetActiveTab() == m_fileSearchViewIndex; }
     bool IsFileWatcherViewTabActive() { return GetTabControl().GetActiveTab() == m_fileWatcherViewIndex; }
-    CFileTopView* GetFileTopView() const { return m_fileTopView; }
-    CFileTreeView* GetFileTreeView() const { return m_fileTreeView; }
-    CFileDupeView* GetFileDupeView() const { return m_fileDupeView; }
+    bool IsFileBackupViewTabActive()  { return GetTabControl().GetActiveTab() == m_fileBackupViewIndex; }
+    CFileTopView*    GetFileTopView()    const { return m_fileTopView; }
+    CFileTreeView*   GetFileTreeView()   const { return m_fileTreeView; }
+    CFileDupeView*   GetFileDupeView()   const { return m_fileDupeView; }
     CFileSearchView* GetFileSearchView() const { return m_fileSearchView; }
     CFileWatcherView* GetFileWatcherView() const { return m_fileWatcherView; }
+    CFileBackupView*  GetFileBackupView()  const { return m_fileBackupView; }
     void SetActiveFileTreeView() { SetActiveView(m_fileTreeViewIndex); }
     void SetActiveTopView() { SetActiveView(m_fileTopViewIndex); }
     void SetActiveDupeView() { SetActiveView(m_fileDupeViewIndex); }
     void SetActiveSearchView() { SetActiveView(m_fileSearchViewIndex); }
     void SetActiveWatcherView() { SetActiveView(m_fileWatcherViewIndex); }
+    void SetActiveBackupView() { SetActiveView(m_fileBackupViewIndex); }
     void SetDupeTabVisibility(bool show = true);
     void SetSearchTabVisibility(bool show = true);
     void SetWatcherTabVisibility(bool show = true);
-    bool IsDupeTabVisible() { return GetTabControl().IsTabVisible(m_fileDupeViewIndex); }
-    bool IsSearchTabVisible() { return GetTabControl().IsTabVisible(m_fileSearchViewIndex); }
+    bool IsDupeTabVisible()    { return GetTabControl().IsTabVisible(m_fileDupeViewIndex); }
+    bool IsSearchTabVisible()  { return GetTabControl().IsTabVisible(m_fileSearchViewIndex); }
     bool IsWatcherTabVisible() { return GetTabControl().IsTabVisible(m_fileWatcherViewIndex); }
     bool CycleTab(bool forward);
 
@@ -63,6 +66,8 @@ protected:
     CFileSearchView* m_fileSearchView = nullptr;
     int m_fileWatcherViewIndex = -1;
     CFileWatcherView* m_fileWatcherView = nullptr;
+    int m_fileBackupViewIndex = -1;
+    CFileBackupView* m_fileBackupView = nullptr;
 
     DECLARE_MESSAGE_MAP()
     afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);

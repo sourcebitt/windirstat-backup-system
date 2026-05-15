@@ -23,6 +23,7 @@
 #include "FileDupeControl.h"
 #include "FileSearchControl.h"
 #include "FileTreeControl.h"
+#include "FileBackupControl.h"
 #include "ControlView.h"
 
 class CFileTreeView final : public CControlView
@@ -106,6 +107,25 @@ protected:
     const CTreeListControl& GetControl() const override { return m_control; }
 
     CFileSearchControl m_control;
+
+    DECLARE_MESSAGE_MAP()
+    afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+};
+
+class CFileBackupView final : public CControlView
+{
+protected:
+
+    DECLARE_DYNCREATE(CFileBackupView)
+    CFileBackupView() = default;
+    ~CFileBackupView() override = default;
+
+    CTreeListControl& GetControl() override { return m_control; }
+    const CTreeListControl& GetControl() const override { return m_control; }
+
+    void OnUpdate(CView* pSender, LPARAM lHint, CObject* pHint) override;
+
+    CFileBackupControl m_control;
 
     DECLARE_MESSAGE_MAP()
     afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);

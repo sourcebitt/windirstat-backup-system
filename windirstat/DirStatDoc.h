@@ -92,6 +92,7 @@ protected:
     BOOL OnNewDocument() override;
     BOOL OnOpenDocument(LPCWSTR lpszPathName) override;
     BOOL OnOpenDocument(CItem* newroot);
+    void OpenBackupSources();
     void SetPathName(LPCWSTR lpszPathName, BOOL bAddToMRU) override;
     void SetTitlePrefix(const std::wstring& prefix) const;
 

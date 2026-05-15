@@ -188,6 +188,9 @@
     <ClInclude Include="Controls\FileWatcherControl.h">
       <Filter>Header Files\User Interface\Controls</Filter>
     </ClInclude>
+    <ClInclude Include="Controls\FileBackupControl.h">
+      <Filter>Header Files\User Interface\Controls</Filter>
+    </ClInclude>
     <ClInclude Include="Views\ControlView.h">
       <Filter>Header Files\User Interface\Views</Filter>
     </ClInclude>
@@ -195,6 +198,15 @@
       <Filter>Header Files\Core</Filter>
     </ClInclude>
     <ClInclude Include="Constants.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="BackupEngine.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="BackupManifest.h">
+      <Filter>Header Files\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="BackupStore.h">
       <Filter>Header Files\Core</Filter>
     </ClInclude>
     <ClInclude Include="CsvLoader.h">
@@ -361,6 +373,9 @@
     <ClCompile Include="Controls\FileWatcherControl.cpp">
       <Filter>Source Files\User Interface\Controls</Filter>
     </ClCompile>
+    <ClCompile Include="Controls\FileBackupControl.cpp">
+      <Filter>Source Files\User Interface\Controls</Filter>
+    </ClCompile>
     <ClCompile Include="Views\ControlView.cpp">
       <Filter>Source Files\User Interface\Views</Filter>
     </ClCompile>
@@ -378,6 +393,15 @@
     </ClCompile>
     <ClCompile Include="Layout.cpp">
       <Filter>Source Files\User Interface</Filter>
+    </ClCompile>
+    <ClCompile Include="BackupEngine.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="BackupManifest.cpp">
+      <Filter>Source Files\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="BackupStore.cpp">
+      <Filter>Source Files\Core</Filter>
     </ClCompile>
     <ClCompile Include="CsvLoader.cpp">
       <Filter>Source Files\Core</Filter>

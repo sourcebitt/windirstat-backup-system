@@ -191,3 +191,37 @@ int CFileSearchView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
 
     return 0;
 }
+
+IMPLEMENT_DYNCREATE(CFileBackupView, CControlView)
+
+BEGIN_MESSAGE_MAP(CFileBackupView, CControlView)
+    ON_WM_CREATE()
+END_MESSAGE_MAP()
+
+int CFileBackupView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
+{
+    if (CControlView::OnCreate(lpCreateStruct) == -1) return -1;
+
+    constexpr RECT rect = {0, 0, 0, 0};
+    m_control.CreateExtended(LVS_EX_HEADERDRAGDROP, LVS_OWNERDATA | WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS, rect, this, ID_WDS_CONTROL);
+    m_control.ShowGrid(COptions::ListGrid);
+    m_control.ShowStripes(COptions::ListStripes);
+    m_control.ShowFullRowSelection(COptions::ListFullRowSelection);
+
+    // Columns should be in enumeration order so initial sort will work
+    InsertCol(IDS_COL_NAME,          LVCFMT_LEFT,  500, COL_ITEMBAK_NAME);
+    InsertCol(IDS_COL_BACKUP_STATUS, LVCFMT_LEFT,  150, COL_ITEMBAK_STATUS);
+    InsertCol(IDS_COL_SIZE_LOGICAL,  LVCFMT_RIGHT,  90, COL_ITEMBAK_SIZE);
+    InsertCol(IDS_COL_BACKED_AT,     LVCFMT_LEFT,  130, COL_ITEMBAK_BACKED_AT);
+    m_control.SetSorting(COL_ITEMBAK_NAME, true);
+
+    m_control.OnColumnsInserted();
+
+    return 0;
+}
+
+void CFileBackupView::OnUpdate(CView* /*pSender*/, LPARAM lHint, CObject* /*pHint*/)
+{
+    if (lHint == HINT_NEWROOT || lHint == 0)
+        m_control.Populate();
+}

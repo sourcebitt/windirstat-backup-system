@@ -480,6 +480,7 @@
     <ClInclude Include="Controls\FileTopControl.h" />
     <ClInclude Include="Controls\FileTreeControl.h" />
     <ClInclude Include="Controls\FileWatcherControl.h" />
+    <ClInclude Include="Controls\FileBackupControl.h" />
     <ClInclude Include="Controls\IconHandler.h" />
     <ClInclude Include="Controls\WdsListControl.h" />
     <ClInclude Include="Controls\PacMan.h" />
@@ -488,6 +489,9 @@
     <ClInclude Include="Controls\TreeMap.h" />
     <ClInclude Include="Controls\XYSlider.h" />
     <ClInclude Include="Controls\FileSearchControl.h" />
+    <ClInclude Include="BackupEngine.h" />
+    <ClInclude Include="BackupManifest.h" />
+    <ClInclude Include="BackupStore.h" />
     <ClInclude Include="DarkMode.h" />
     <ClInclude Include="Dialogs\MessageBoxDlg.h" />
     <ClInclude Include="Dialogs\ProgressDlg.h" />
@@ -532,6 +536,7 @@
     <ClInclude Include="Views\TreeMapView.h" />
     <ClInclude Include="WinDirStat.h" />
     <ClInclude Include="Dialogs\AboutDlg.h" />
+    <ClInclude Include="Dialogs\ManageSourceFoldersDlg.h" />
     <ClInclude Include="Dialogs\SelectDrivesDlg.h" />
   </ItemGroup>
   <ItemGroup>
@@ -540,12 +545,16 @@
     <ClCompile Include="Controls\FileTopControl.cpp" />
     <ClCompile Include="Controls\FileTreeControl.cpp" />
     <ClCompile Include="Controls\FileWatcherControl.cpp" />
+    <ClCompile Include="Controls\FileBackupControl.cpp" />
     <ClCompile Include="Controls\WdsListControl.cpp" />
     <ClCompile Include="Controls\PacMan.cpp" />
     <ClCompile Include="Controls\DrawTextCache.cpp" />
     <ClCompile Include="Controls\TreeListControl.cpp" />
     <ClCompile Include="Controls\TreeMap.cpp" />
     <ClCompile Include="Controls\XYSlider.cpp" />
+    <ClCompile Include="BackupEngine.cpp" />
+    <ClCompile Include="BackupManifest.cpp" />
+    <ClCompile Include="BackupStore.cpp" />
     <ClCompile Include="CsvLoader.cpp" />
     <ClCompile Include="DarkMode.cpp" />
     <ClCompile Include="Dialogs\MessageBoxDlg.cpp" />
@@ -605,6 +614,8 @@
     <ClCompile Include="Controls\IconHandler.cpp">
     </ClCompile>
     <ClCompile Include="Dialogs\AboutDlg.cpp">
+    </ClCompile>
+    <ClCompile Include="Dialogs\ManageSourceFoldersDlg.cpp">
     </ClCompile>
     <ClCompile Include="Dialogs\SelectDrivesDlg.cpp">
     </ClCompile>

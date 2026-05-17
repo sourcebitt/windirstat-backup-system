@@ -1,5 +1,9 @@
 # WinDirStat - Windows Directory Statistics
 
+## SOURCEBITT VERSION - NOT THE REGULAR WINDIRSTAT. BACKUP TAB ADDED.
+
+This version has the ability to backup specific directories of your computer. I tried to modify the original windirstat to a minimum, so most of backup functions are within the backup tab. The only major addition is the ability to execute windirstat in the backup directories instead of a single direcotry/drive.
+
 ## Description
 
 WinDirStat is a disk usage analyzer and cleanup assistant for Microsoft Windows. It scans local drives, selected drives, individual folders, and command-line targets, then shows where storage is being used through a sortable directory tree, an extension/type breakdown, and an interactive [treemap](https://en.wikipedia.org/wiki/Treemap) where larger files and folders take up larger areas.

@@ -125,8 +125,24 @@ protected:
 
     void OnUpdate(CView* pSender, LPARAM lHint, CObject* pHint) override;
 
+    // Height of the search/filter strip above the tree
+    static constexpr int STRIP_H = 30;
+
     CFileBackupControl m_control;
+    CEdit   m_searchEdit;
+    CButton m_chkBackupOnly;
+    CButton m_chkUnbacked;
+    CButton m_chkListView;
+
+    void ApplyFilter();
 
     DECLARE_MESSAGE_MAP()
-    afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+    afx_msg int    OnCreate(LPCREATESTRUCT lpCreateStruct);
+    afx_msg void   OnSize(UINT nType, int cx, int cy);
+    afx_msg BOOL   OnEraseBkgnd(CDC* pDC);
+    afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);
+    afx_msg void   OnSearchChange();
+    afx_msg void   OnChkBackupOnly();
+    afx_msg void   OnChkUnbacked();
+    afx_msg void   OnChkListView();
 };

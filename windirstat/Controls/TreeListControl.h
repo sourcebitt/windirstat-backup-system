@@ -105,6 +105,7 @@ class CTreeListControl : public CWdsListControl
     void SysColorChanged() override;
     virtual void SetRootItem(CTreeListItem* root = nullptr);
     virtual void AfterDeleteAllItems() {}
+    virtual void OnBeforeExpand(CTreeListItem* /*item*/) {}
     void OnChildAdded(const CTreeListItem* parent, CTreeListItem* child);
     void OnChildRemoved(const CTreeListItem* parent, const CTreeListItem* child);
     void OnRemovingAllChildren(const CTreeListItem* parent);

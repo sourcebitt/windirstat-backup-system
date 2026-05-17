@@ -62,6 +62,15 @@ void CFileTabbedView::OnInitialUpdate()
         CDirStatDoc::Get()->GetRootItem() != nullptr);
 }
 
+void CFileTabbedView::OnUpdate(CView* /*pSender*/, const LPARAM lHint, CObject* /*pHint*/)
+{
+    if (lHint == HINT_NEWROOT)
+    {
+        SetDupeTabVisibility(COptions::ScanForDuplicates &&
+            CDirStatDoc::Get()->GetRootItem() != nullptr);
+    }
+}
+
 void CFileTabbedView::SetDupeTabVisibility(const bool show)
 {
     GetTabControl().ShowTab(m_fileDupeViewIndex, show);
@@ -93,8 +102,10 @@ LRESULT CFileTabbedView::OnChangeActiveTab(WPARAM wp, LPARAM lp)
     }
     else if (wp == static_cast<WPARAM>(m_fileBackupViewIndex))
     {
-        CWaitCursor wc;
-        CFileBackupControl::Get()->Populate();
+        // Only build the tree on first visit; subsequent tab switches are instant.
+        if (CFileBackupControl* ctrl = CFileBackupControl::Get())
+            if (ctrl->GetItemCount() == 0)
+                ctrl->Rebuild(BackupFilter::All);
     }
 
     return CTabView::OnChangeActiveTab(wp, lp);

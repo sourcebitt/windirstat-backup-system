@@ -17,6 +17,7 @@
 
 #include "pch.h"
 #include "FileTreeView.h"
+#include "DarkMode.h"
 
 IMPLEMENT_DYNCREATE(CFileTreeView, CControlView)
 
@@ -196,32 +197,162 @@ IMPLEMENT_DYNCREATE(CFileBackupView, CControlView)
 
 BEGIN_MESSAGE_MAP(CFileBackupView, CControlView)
     ON_WM_CREATE()
+    ON_WM_SIZE()
+    ON_WM_ERASEBKGND()
+    ON_WM_CTLCOLOR()
+    ON_EN_CHANGE(IDC_BACKUP_SEARCH,            &CFileBackupView::OnSearchChange)
+    ON_BN_CLICKED(IDC_BACKUP_FILTER_BACKUPONLY, &CFileBackupView::OnChkBackupOnly)
+    ON_BN_CLICKED(IDC_BACKUP_FILTER_UNBACKED,   &CFileBackupView::OnChkUnbacked)
+    ON_BN_CLICKED(IDC_BACKUP_VIEW_TOGGLE,       &CFileBackupView::OnChkListView)
 END_MESSAGE_MAP()
 
 int CFileBackupView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
 {
     if (CControlView::OnCreate(lpCreateStruct) == -1) return -1;
 
+    // Create search box.
+    m_searchEdit.Create(WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+        CRect(0, 0, 1, 1), this, IDC_BACKUP_SEARCH);
+
+    // Create filter checkboxes.
+    m_chkBackupOnly.Create(L"Backup only", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        CRect(0, 0, 1, 1), this, IDC_BACKUP_FILTER_BACKUPONLY);
+
+    m_chkUnbacked.Create(L"Not backed", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        CRect(0, 0, 1, 1), this, IDC_BACKUP_FILTER_UNBACKED);
+
+    m_chkListView.Create(L"List view", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        CRect(0, 0, 1, 1), this, IDC_BACKUP_VIEW_TOGGLE);
+
+    // Apply dark-mode theming to the strip controls
+    DarkMode::AdjustControls(GetSafeHwnd());
+
+    // Create tree list control.
     constexpr RECT rect = {0, 0, 0, 0};
-    m_control.CreateExtended(LVS_EX_HEADERDRAGDROP, LVS_OWNERDATA | WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS, rect, this, ID_WDS_CONTROL);
+    m_control.CreateExtended(LVS_EX_HEADERDRAGDROP,
+        LVS_OWNERDATA | WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS,
+        rect, this, ID_WDS_CONTROL);
     m_control.ShowGrid(COptions::ListGrid);
     m_control.ShowStripes(COptions::ListStripes);
     m_control.ShowFullRowSelection(COptions::ListFullRowSelection);
 
-    // Columns should be in enumeration order so initial sort will work
     InsertCol(IDS_COL_NAME,          LVCFMT_LEFT,  500, COL_ITEMBAK_NAME);
     InsertCol(IDS_COL_BACKUP_STATUS, LVCFMT_LEFT,  150, COL_ITEMBAK_STATUS);
     InsertCol(IDS_COL_SIZE_LOGICAL,  LVCFMT_RIGHT,  90, COL_ITEMBAK_SIZE);
     InsertCol(IDS_COL_BACKED_AT,     LVCFMT_LEFT,  130, COL_ITEMBAK_BACKED_AT);
     m_control.SetSorting(COL_ITEMBAK_NAME, true);
-
     m_control.OnColumnsInserted();
 
     return 0;
 }
 
-void CFileBackupView::OnUpdate(CView* /*pSender*/, LPARAM lHint, CObject* /*pHint*/)
+void CFileBackupView::OnSize(UINT nType, const int cx, const int cy)
 {
-    if (lHint == HINT_NEWROOT || lHint == 0)
-        m_control.Populate();
+    CView::OnSize(nType, cx, cy);
+
+    if (!IsWindow(m_searchEdit.m_hWnd)) return;
+
+    // Strip layout: [Search | Backup only | Not backed | List view]
+    constexpr int PAD       = 4;
+    constexpr int H         = STRIP_H - 2 * PAD;
+    constexpr int SRCH      = 180;
+    constexpr int CHK_BACK  = 125; // "Backup only" needs extra room
+    constexpr int CHK_UNB   = 110; // "Not backed"
+    constexpr int LST       = 90;  // "List view"
+
+    int x = PAD;
+    m_searchEdit.MoveWindow(x, PAD, SRCH, H);
+    x += SRCH + PAD;
+    m_chkBackupOnly.MoveWindow(x, PAD, CHK_BACK, H);
+    x += CHK_BACK + PAD;
+    m_chkUnbacked.MoveWindow(x, PAD, CHK_UNB, H);
+    x += CHK_UNB + PAD;
+    m_chkListView.MoveWindow(x, PAD, LST, H);
+
+    if (IsWindow(m_control.m_hWnd))
+        m_control.MoveWindow(0, STRIP_H, cx, max(0, cy - STRIP_H));
+}
+
+BOOL CFileBackupView::OnEraseBkgnd(CDC* pDC)
+{
+    // Fill the strip area with the app's button-face color (dark or light).
+    // The base CControlView::OnEraseBkgnd returns TRUE without drawing,
+    // which leaves the strip dirty and garbles the control labels.
+    CRect rc;
+    GetClientRect(&rc);
+    rc.bottom = min(rc.bottom, STRIP_H);
+    pDC->FillSolidRect(rc, DarkMode::WdsSysColor(COLOR_BTNFACE));
+    return TRUE;
+}
+
+HBRUSH CFileBackupView::OnCtlColor(CDC* pDC, CWnd* pWnd, const UINT nCtlColor)
+{
+    // Let the dark-mode layer handle edit/static controls in the strip.
+    if (const HBRUSH br = DarkMode::OnCtlColor(pDC, nCtlColor))
+        return br;
+
+    // For checkboxes (CTLCOLOR_BTN): transparent text on the strip background.
+    if (nCtlColor == CTLCOLOR_BTN)
+    {
+        pDC->SetBkMode(TRANSPARENT);
+        pDC->SetTextColor(DarkMode::WdsSysColor(COLOR_BTNTEXT));
+        return ::GetSysColorBrush(COLOR_BTNFACE); // unused by themed buttons, needed for legacy
+    }
+
+    return CView::OnCtlColor(pDC, pWnd, nCtlColor);
+}
+
+void CFileBackupView::ApplyFilter()
+{
+    const bool backupOnly = (m_chkBackupOnly.GetCheck() == BST_CHECKED);
+    const bool unbacked   = (m_chkUnbacked.GetCheck()   == BST_CHECKED);
+    const bool listMode   = (m_chkListView.GetCheck()   == BST_CHECKED);
+
+    BackupFilter filter = BackupFilter::All;
+    if (backupOnly && !unbacked) filter = BackupFilter::BackupOnly;
+    if (unbacked   && !backupOnly) filter = BackupFilter::Unbacked;
+    // Both checked: show All
+    if (backupOnly && unbacked) filter = BackupFilter::All;
+
+    CString searchText;
+    m_searchEdit.GetWindowText(searchText);
+
+    m_control.SetFlatMode(listMode);
+    m_control.Rebuild(filter, searchText.GetString());
+}
+
+void CFileBackupView::OnSearchChange()
+{
+    ApplyFilter();
+}
+
+void CFileBackupView::OnChkBackupOnly()
+{
+    // Mutually exclusive with Unbacked
+    if (m_chkBackupOnly.GetCheck() == BST_CHECKED)
+        m_chkUnbacked.SetCheck(BST_UNCHECKED);
+    ApplyFilter();
+}
+
+void CFileBackupView::OnChkUnbacked()
+{
+    // Mutually exclusive with BackupOnly
+    if (m_chkUnbacked.GetCheck() == BST_CHECKED)
+        m_chkBackupOnly.SetCheck(BST_UNCHECKED);
+    ApplyFilter();
+}
+
+void CFileBackupView::OnChkListView()
+{
+    ApplyFilter();
+}
+
+void CFileBackupView::OnUpdate(CView* /*pSender*/, const LPARAM lHint, CObject* /*pHint*/)
+{
+    // On a new root (e.g. "Scan Backup Sources"), rebuild from scratch.
+    // On generic updates, only populate if the tree is currently empty.
+    if (lHint == HINT_NEWROOT)
+        ApplyFilter();
+    else if (lHint == 0 && m_control.GetItemCount() == 0)
+        ApplyFilter();
 }

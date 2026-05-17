@@ -1,5 +1,5 @@
 // WinDirStat - Directory Statistics
-// Copyright © WinDirStat Team
+//
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -18,20 +18,12 @@
 #include "pch.h"
 #include "BackupStore.h"
 
-// ---------------------------------------------------------------------------
-// Construction
-// ---------------------------------------------------------------------------
-
 CBackupStore::CBackupStore(std::wstring backupRoot)
     : m_backupRoot(std::move(backupRoot))
 {
     // Normalize separator to backslash for Windows API compatibility.
     std::ranges::replace(m_backupRoot, L'/', L'\\');
 }
-
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
 
 bool CBackupStore::Initialize() const
 {
@@ -46,10 +38,6 @@ bool CBackupStore::Initialize() const
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// Path helpers
-// ---------------------------------------------------------------------------
-
 std::wstring CBackupStore::GetObjectsDir() const
 {
     return m_backupRoot + L"\\objects";
@@ -61,19 +49,11 @@ std::wstring CBackupStore::GetObjectPath(const std::wstring& hash) const
     return GetObjectsDir() + L'\\' + hash.substr(0, 2) + L'\\' + hash.substr(2);
 }
 
-// ---------------------------------------------------------------------------
-// Object queries
-// ---------------------------------------------------------------------------
-
 bool CBackupStore::HasObject(const std::wstring& hash) const
 {
     std::error_code ec;
     return std::filesystem::exists(GetObjectPath(hash), ec);
 }
-
-// ---------------------------------------------------------------------------
-// Object mutations
-// ---------------------------------------------------------------------------
 
 bool CBackupStore::StoreObject(const std::wstring& srcPath, const std::wstring& hash) const
 {
@@ -93,9 +73,8 @@ bool CBackupStore::StoreObject(const std::wstring& srcPath, const std::wstring& 
         return false;
     }
 
-    // CopyFileW with bFailIfExists=TRUE — races that create the object between
-    // our existence check and the copy are handled gracefully: the copy fails
-    // with ERROR_FILE_EXISTS, which we treat as a non-error (already stored).
+    // CopyFileW with bFailIfExists=TRUE: a race that creates the object between
+    // our existence check and the copy fails with ERROR_FILE_EXISTS, treated as success.
     if (!CopyFileW(srcPath.c_str(), dest.c_str(), TRUE))
     {
         const DWORD err = GetLastError();
@@ -134,7 +113,7 @@ bool CBackupStore::RetrieveObject(const std::wstring& hash, const std::wstring& 
         return false;
     }
 
-    // FALSE for bFailIfExists: overwrite any partially-restored file.
+    // bFailIfExists=FALSE: overwrite any partially-restored file.
     if (!CopyFileW(src.c_str(), destPath.c_str(), FALSE))
     {
         TRACE(L"BackupStore: CopyFileW restore failed for hash %s, error %lu\n",
@@ -161,17 +140,11 @@ void CBackupStore::DeleteObject(const std::wstring& hash) const
     }
 }
 
-// ---------------------------------------------------------------------------
-// SHA-256 computation
-//
-// Unlike CItem::GetFileHash(), which truncates the digest to 16 bytes for
-// fast duplicate detection, this function always returns the full 32-byte
-// (64 hex character) digest required for content-addressed object identity.
-// ---------------------------------------------------------------------------
-
+// Full 32-byte SHA-256 digest, unlike CItem::GetFileHash() which truncates to 16 bytes.
+// Required for content-addressed object identity in the backup store.
 std::wstring CBackupStore::ComputeFileSha256(const std::wstring& filePath)
 {
-    // Open the file with sequential-scan and backup-semantics hints.
+    // Open with sequential-scan and backup-semantics flags.
     const SmartPointer<HANDLE> hFile(CloseHandle,
         CreateFileW(filePath.c_str(), GENERIC_READ,
                     FILE_SHARE_READ | FILE_SHARE_DELETE,
@@ -197,7 +170,7 @@ std::wstring CBackupStore::ComputeFileSha256(const std::wstring& filePath)
     const SmartPointer<BCRYPT_ALG_HANDLE> hAlg(
         [](BCRYPT_ALG_HANDLE h) { BCryptCloseAlgorithmProvider(h, 0); }, hAlgRaw);
 
-    // Query the size of the hash object buffer.
+    // Query the hash object buffer size.
     DWORD hashObjSize = 0;
     DWORD cbResult    = 0;
     BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH,
@@ -229,7 +202,7 @@ std::wstring CBackupStore::ComputeFileSha256(const std::wstring& filePath)
         }
     }
 
-    // Finalise — SHA-256 digest is always exactly 32 bytes.
+    // Finalise — SHA-256 is always 32 bytes.
     std::array<BYTE, 32> digest{};
     if (!BCRYPT_SUCCESS(BCryptFinishHash(
             hHash, digest.data(), static_cast<ULONG>(digest.size()), 0)))

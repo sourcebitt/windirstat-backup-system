@@ -1,5 +1,5 @@
 // WinDirStat - Directory Statistics
-// Copyright © WinDirStat Team
+//
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -100,6 +100,7 @@ public:
     // ── Accessors ─────────────────────────────────────────────────────────────
 
     [[nodiscard]] const CBackupManifest& GetManifest() const noexcept { return m_manifest; }
+    [[nodiscard]]       CBackupManifest& GetManifest()       noexcept { return m_manifest; }
     [[nodiscard]] const CBackupStore&    GetStore()    const noexcept { return m_store; }
     [[nodiscard]] const std::vector<std::wstring>& GetSourceFolders() const noexcept { return m_sourceFolders; }
 

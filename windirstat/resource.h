@@ -142,6 +142,11 @@
 #define IDC_SOURCE_FOLDERS_LIST         1126
 #define IDC_ADD_SOURCE_FOLDER           1127
 #define IDC_REMOVE_SOURCE_FOLDER        1128
+#define IDC_BACKUP_SEARCH               1129
+#define IDC_BACKUP_FILTER_BACKUPONLY    1130
+#define IDC_BACKUP_FILTER_UNBACKED      1131
+#define IDC_BACKUP_VIEW_TOGGLE          1132
+#define IDC_RADIO_TARGET_BACKUP_SOURCES 1133
 #define ID_WDS_CONTROL                  4711
 #define ID_TREEMAP_ZOOMRESET            32767
 #define ID_CLEANUP_EXPLORER_SELECT      32768
@@ -227,7 +232,6 @@
 #define ID_TREEMAP_SHOW_EXTENSIONS      32941
 #define ID_VIEW_LARGE_TOOLBAR           32942
 #define ID_FILTER_EXCLUDE_ITEM          32943
-#define ID_FILE_SCAN_BACKUP_SOURCES     32944
 #define IDS_AUTHOR_EMAIL                57345
 #define IDS_URL_WEBSITE                 57346
 #define IDS_URL_HELP                    57347
@@ -243,7 +247,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        306
 #define _APS_NEXT_COMMAND_VALUE         32943
-#define _APS_NEXT_CONTROL_VALUE         1129
+#define _APS_NEXT_CONTROL_VALUE         1134
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

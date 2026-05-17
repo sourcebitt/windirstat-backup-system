@@ -1,5 +1,5 @@
 // WinDirStat - Directory Statistics
-// Copyright © WinDirStat Team
+//
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -18,19 +18,11 @@
 #include "pch.h"
 #include "BackupEngine.h"
 
-// ---------------------------------------------------------------------------
-// Construction
-// ---------------------------------------------------------------------------
-
 CBackupEngine::CBackupEngine(std::wstring backupRoot, std::vector<std::wstring> sourceFolders)
     : m_store(std::move(backupRoot))
     , m_sourceFolders(std::move(sourceFolders))
 {
 }
-
-// ---------------------------------------------------------------------------
-// Lifecycle
-// ---------------------------------------------------------------------------
 
 bool CBackupEngine::Initialize()
 {
@@ -45,20 +37,14 @@ bool CBackupEngine::Save() const
     return m_manifest.Save(ManifestPath());
 }
 
-// ---------------------------------------------------------------------------
-// Backup pass
-// ---------------------------------------------------------------------------
-
 BackupPassResult CBackupEngine::RunPass()
 {
     BackupPassResult result;
 
-    // Build the hash index once up-front for O(1) relocation detection.
-    // (A "relocated" file is one whose content was already stored under a
-    // different path — the object exists but the manifest path is new.)
+    // Build hash index for O(1) relocation detection.
     const auto hashIndex = m_manifest.BuildHashIndex();
 
-    // Track every normalized path we visit so we can count missing entries.
+    // Track visited paths to identify missing entries.
     std::unordered_set<std::wstring> visited;
 
     const auto processFolder = [&](const std::wstring& folder)
@@ -73,7 +59,6 @@ BackupPassResult CBackupEngine::RunPass()
             std::error_code entryEc;
             if (!dirEntry.is_regular_file(entryEc)) continue;
 
-            // ── Metadata ──────────────────────────────────────────────────
             const std::wstring rawPath  = dirEntry.path().wstring();
             const std::wstring normPath = CBackupManifest::NormalizePath(rawPath);
             visited.insert(normPath);
@@ -85,12 +70,12 @@ BackupPassResult CBackupEngine::RunPass()
             const double mtime = FileTimeToUnix(dirEntry.last_write_time(entryEc));
             if (entryEc) { ++result.errors; continue; }
 
-            // ── Fast skip: mtime + size unchanged ─────────────────────────
+            // Skip if mtime and size are unchanged.
             const BackupFileEntry* existing = m_manifest.Find(normPath);
             if (existing && !existing->versions.empty())
             {
                 const BackupFileVersion& latest = existing->versions.back();
-                // Use a 2-second tolerance to handle FAT32 mtime granularity.
+                // 2-second tolerance for FAT32 mtime granularity.
                 if (latest.size == fileSize && std::abs(latest.mtime - mtime) < 2.0)
                 {
                     ++result.filesUnchanged;
@@ -98,7 +83,6 @@ BackupPassResult CBackupEngine::RunPass()
                 }
             }
 
-            // ── Hash the file ─────────────────────────────────────────────
             const std::wstring hash = CBackupStore::ComputeFileSha256(rawPath);
             if (hash.empty())
             {
@@ -107,20 +91,17 @@ BackupPassResult CBackupEngine::RunPass()
                 continue;
             }
 
-            // ── Content-unchanged check (mtime drifted, bytes identical) ──
+            // Skip if content is unchanged despite mtime drift.
             if (existing && existing->currentHash == hash)
             {
                 ++result.filesUnchanged;
                 continue;
             }
 
-            // ── Determine status string for manifest record ────────────────
             std::wstring status;
             if (!existing)
             {
-                // Path is new to the manifest.
-                // "relocated" if the content was already stored from another path;
-                // "new" if this is genuinely fresh content.
+                // "relocated" if already stored from another path, "new" otherwise.
                 status = m_store.HasObject(hash) ? L"relocated" : L"new";
             }
             else
@@ -129,11 +110,9 @@ BackupPassResult CBackupEngine::RunPass()
                 status = L"modified";
             }
 
-            // ── Store the object (no-op if already present) ────────────────
             if (m_store.StoreObject(rawPath, hash))
                 ++result.objectsStored;
 
-            // ── Update manifest ───────────────────────────────────────────
             m_manifest.AddOrUpdate(normPath, hash, status, fileSize, mtime);
 
             if (status == L"new")
@@ -154,27 +133,42 @@ BackupPassResult CBackupEngine::RunPass()
     for (const auto& folder : m_sourceFolders)
         processFolder(folder);
 
-    // ── Count missing entries ─────────────────────────────────────────────
+    // Collect hashes still on disk to distinguish relocated entries from backup-only.
+    std::unordered_set<std::wstring> visitedHashes;
+    visitedHashes.reserve(visited.size());
+    for (const auto& [path, entry] : m_manifest.GetFiles())
+        if (visited.contains(path))
+            visitedHashes.insert(entry.currentHash);
+
+    // Auto-purge entries whose content was relocated or deduped; keep genuinely missing ones.
+    std::vector<std::wstring> toPurge;
     for (const auto& [path, entry] : m_manifest.GetFiles())
     {
-        if (!visited.contains(path))
+        if (visited.contains(path)) continue;
+        if (visitedHashes.contains(entry.currentHash))
+            toPurge.push_back(path);
+        else
             ++result.filesMissing;
     }
 
-    TRACE(L"BackupEngine: pass complete — new=%zu mod=%zu rel=%zu unch=%zu miss=%zu stored=%zu err=%zu\n",
+    for (const auto& normPath : toPurge)
+    {
+        std::wstring orphanedHash;
+        m_manifest.Purge(normPath, orphanedHash);
+        if (!orphanedHash.empty())
+            m_store.DeleteObject(orphanedHash);
+    }
+
+    TRACE(L"BackupEngine: pass complete - new=%zu mod=%zu rel=%zu unch=%zu miss=%zu stored=%zu err=%zu\n",
           result.filesNew, result.filesModified, result.filesRelocated,
           result.filesUnchanged, result.filesMissing, result.objectsStored, result.errors);
 
     return result;
 }
 
-// ---------------------------------------------------------------------------
-// Classification
-// ---------------------------------------------------------------------------
-
 std::unordered_map<std::wstring, BackupFileStatus> CBackupEngine::ClassifyAll() const
 {
-    // Build hash index: hash → [paths that reference it in manifest]
+    // Build hash-to-paths index for duplicate detection.
     const auto hashIndex = m_manifest.BuildHashIndex();
 
     std::unordered_map<std::wstring, BackupFileStatus> out;
@@ -189,7 +183,7 @@ std::unordered_map<std::wstring, BackupFileStatus> CBackupEngine::ClassifyAll() 
 
         if (onDisk)
         {
-            // BackedDuplicate when at least one OTHER path shares the same hash.
+            // BackedDuplicate when at least one other path shares the same hash.
             const auto it = hashIndex.find(entry.currentHash);
             const bool isDuplicate = it != hashIndex.end() && it->second.size() > 1;
             out.emplace(normPath,
@@ -198,8 +192,7 @@ std::unordered_map<std::wstring, BackupFileStatus> CBackupEngine::ClassifyAll() 
         }
         else
         {
-            // MissingSurvived when the same content exists at another path
-            // that IS still on disk.
+            // MissingSurvived when the same content exists at another on-disk path.
             const auto it = hashIndex.find(entry.currentHash);
             bool survived = false;
             if (it != hashIndex.end())
@@ -220,10 +213,6 @@ std::unordered_map<std::wstring, BackupFileStatus> CBackupEngine::ClassifyAll() 
     return out;
 }
 
-// ---------------------------------------------------------------------------
-// Private helpers
-// ---------------------------------------------------------------------------
-
 std::wstring CBackupEngine::ManifestPath() const
 {
     return m_store.GetBackupRoot() + L"\\manifest.json";
@@ -232,7 +221,7 @@ std::wstring CBackupEngine::ManifestPath() const
 double CBackupEngine::FileTimeToUnix(std::filesystem::file_time_type t) noexcept
 {
     // clock_cast converts from file_clock (Windows: 100ns since 1601-01-01)
-    // to system_clock (Unix: nanoseconds since 1970-01-01).
+    // to system_clock (Unix epoch), needed to produce a portable double timestamp.
     using namespace std::chrono;
     const auto sysTime = clock_cast<system_clock>(t);
     return duration_cast<duration<double>>(sysTime.time_since_epoch()).count();

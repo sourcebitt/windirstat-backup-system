@@ -54,6 +54,7 @@ protected:
     ~CFileTabbedView() override = default;
     DECLARE_DYNCREATE(CFileTabbedView)
     void OnInitialUpdate() override;
+    void OnUpdate(CView* pSender, LPARAM lHint, CObject* pHint) override;
 
     // Used for storing and retrieving the various tab views
     int m_fileTreeViewIndex = -1;

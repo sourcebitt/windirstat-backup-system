@@ -31,8 +31,6 @@ CIconHandler* GetIconHandler()
 BEGIN_MESSAGE_MAP(CDirStatApp, CWinAppEx)
     ON_COMMAND(ID_APP_ABOUT, OnAppAbout)
     ON_COMMAND(ID_FILE_SELECT, OnFileOpen)
-    ON_COMMAND(ID_FILE_SCAN_BACKUP_SOURCES, OnFileScanBackupSources)
-    ON_UPDATE_COMMAND_UI(ID_FILE_SCAN_BACKUP_SOURCES, OnUpdateFileScanBackupSources)
     ON_COMMAND(ID_FILTER, OnFilter)
     ON_COMMAND(ID_RUN_ELEVATED, OnRunElevated)
     ON_UPDATE_COMMAND_UI(ID_RUN_ELEVATED, OnUpdateRunElevated)
@@ -423,24 +421,21 @@ void CDirStatApp::OnAppAbout()
     CAboutDlg().DoModal();
 }
 
-void CDirStatApp::OnFileScanBackupSources()
-{
-    CDirStatDoc::Get()->OpenBackupSources();
-}
-
-void CDirStatApp::OnUpdateFileScanBackupSources(CCmdUI* pCmdUI)
-{
-    pCmdUI->Enable(!COptions::BackupSourceFolders.Obj().empty());
-}
-
 void CDirStatApp::OnFileOpen()
 {
     CopyAllDriveMappings();
 
     if (CSelectDrivesDlg dlg; IDOK == dlg.DoModal())
     {
-        const std::wstring path = JoinString(dlg.GetSelectedItems());
-        m_pDocTemplate->OpenDocumentFile(path.c_str(), true);
+        if (dlg.IsBackupSourcesMode())
+        {
+            CDirStatDoc::Get()->OpenBackupSources();
+        }
+        else
+        {
+            const std::wstring path = JoinString(dlg.GetSelectedItems());
+            m_pDocTemplate->OpenDocumentFile(path.c_str(), true);
+        }
     }
 }
 

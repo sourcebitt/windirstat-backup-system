@@ -678,6 +678,8 @@ void CTreeListControl::ExpandItem(const int i, const bool scroll)
         return;
     }
 
+    OnBeforeExpand(item);
+
     CWaitCursor wc;
 
     int maxwidth = GetSubItemWidth(item, 0);

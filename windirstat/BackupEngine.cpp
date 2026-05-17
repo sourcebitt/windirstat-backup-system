@@ -154,8 +154,7 @@ BackupPassResult CBackupEngine::RunPass()
     for (const auto& normPath : toPurge)
     {
         std::wstring orphanedHash;
-        m_manifest.Purge(normPath, orphanedHash);
-        if (!orphanedHash.empty())
+        if (m_manifest.Purge(normPath, orphanedHash) && !orphanedHash.empty())
             m_store.DeleteObject(orphanedHash);
     }
 

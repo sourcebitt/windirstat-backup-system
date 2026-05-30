@@ -1,4 +1,4 @@
-// WinDirStat - Directory Statistics
+﻿// WinDirStat - Directory Statistics
 //
 //
 // This program is free software: you can redistribute it and/or modify
@@ -145,7 +145,7 @@ void CBackupStore::DeleteObject(const std::wstring& hash) const
 std::wstring CBackupStore::ComputeFileSha256(const std::wstring& filePath)
 {
     // Open with sequential-scan and backup-semantics flags.
-    const SmartPointer<HANDLE> hFile(CloseHandle,
+    const SmartPointer hFile(CloseHandle,
         CreateFileW(filePath.c_str(), GENERIC_READ,
                     FILE_SHARE_READ | FILE_SHARE_DELETE,
                     nullptr, OPEN_EXISTING,
@@ -167,7 +167,7 @@ std::wstring CBackupStore::ComputeFileSha256(const std::wstring& filePath)
         TRACE(L"BackupStore: BCryptOpenAlgorithmProvider failed\n");
         return {};
     }
-    const SmartPointer<BCRYPT_ALG_HANDLE> hAlg(
+    const SmartPointer hAlg(
         [](BCRYPT_ALG_HANDLE h) { BCryptCloseAlgorithmProvider(h, 0); }, hAlgRaw);
 
     // Query the hash object buffer size.
@@ -186,7 +186,7 @@ std::wstring CBackupStore::ComputeFileSha256(const std::wstring& filePath)
         TRACE(L"BackupStore: BCryptCreateHash failed\n");
         return {};
     }
-    const SmartPointer<BCRYPT_HASH_HANDLE> hHash(BCryptDestroyHash, hHashRaw);
+    const SmartPointer hHash([](BCRYPT_HASH_HANDLE h) noexcept { BCryptDestroyHash(h); }, hHashRaw);
 
     // Feed the file to the hash in 1 MiB chunks.
     constexpr DWORD kChunkSize = 1u * 1024u * 1024u;

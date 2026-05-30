@@ -270,7 +270,7 @@ void CFileBackupView::OnSize(UINT nType, const int cx, const int cy)
     m_chkListView.MoveWindow(x, PAD, LST, H);
 
     if (IsWindow(m_control.m_hWnd))
-        m_control.MoveWindow(0, STRIP_H, cx, max(0, cy - STRIP_H));
+        m_control.MoveWindow(0, STRIP_H, cx, std::max(0, cy - STRIP_H));
 }
 
 BOOL CFileBackupView::OnEraseBkgnd(CDC* pDC)
@@ -280,7 +280,7 @@ BOOL CFileBackupView::OnEraseBkgnd(CDC* pDC)
     // which leaves the strip dirty and garbles the control labels.
     CRect rc;
     GetClientRect(&rc);
-    rc.bottom = min(rc.bottom, STRIP_H);
+    rc.bottom = std::min(rc.bottom, static_cast<LONG>(STRIP_H));
     pDC->FillSolidRect(rc, DarkMode::WdsSysColor(COLOR_BTNFACE));
     return TRUE;
 }

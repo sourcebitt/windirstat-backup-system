@@ -173,7 +173,11 @@ void CDirStatDoc::OpenBackupSources()
     const std::wstring rootName = Localization::Lookup(IDS_BACKUP_SOURCES_ROOT);
     m_rootItem = new CItem(IT_MYCOMPUTER | ITF_ROOTITEM, rootName);
     for (const auto& folder : folders)
-        m_rootItem->AddChild(new CItem(IT_DIRECTORY, folder));
+    {
+        auto* dir = new CItem(IT_DIRECTORY, folder);
+        dir->UpdateStatsFromDisk();
+        m_rootItem->AddChild(dir);
+    }
 
     m_zoomItem = m_rootItem;
     UpdateAllViews(nullptr, HINT_NEWROOT);

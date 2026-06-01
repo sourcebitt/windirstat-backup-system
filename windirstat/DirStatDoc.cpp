@@ -156,34 +156,6 @@ BOOL CDirStatDoc::OnOpenDocument(LPCWSTR lpszPathName)
     return true;
 }
 
-void CDirStatDoc::OpenBackupSources()
-{
-    const std::vector<std::wstring>& folders = COptions::BackupSourceFolders.Obj();
-    if (folders.empty())
-    {
-        AfxMessageBox(L"No backup source folders configured.\n"
-                      L"Right-click the Backup tab and use 'Add Source Folder...' to add folders.");
-        return;
-    }
-
-    CMainFrame::Get()->MinimizeTreeMapView();
-    CMainFrame::Get()->MinimizeExtensionView();
-    CDocument::OnNewDocument();
-
-    const std::wstring rootName = Localization::Lookup(IDS_BACKUP_SOURCES_ROOT);
-    m_rootItem = new CItem(IT_MYCOMPUTER | ITF_ROOTITEM, rootName);
-    for (const auto& folder : folders)
-    {
-        auto* dir = new CItem(IT_DIRECTORY, folder);
-        dir->UpdateStatsFromDisk();
-        m_rootItem->AddChild(dir);
-    }
-
-    m_zoomItem = m_rootItem;
-    UpdateAllViews(nullptr, HINT_NEWROOT);
-    StartScanningEngine({ m_rootItem });
-}
-
 BOOL CDirStatDoc::OnOpenDocument(CItem* newroot)
 {
     CMainFrame::Get()->MinimizeTreeMapView();

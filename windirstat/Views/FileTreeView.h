@@ -132,7 +132,9 @@ protected:
     CEdit   m_searchEdit;
     CButton m_chkBackupOnly;
     CButton m_chkUnbacked;
+    CButton m_chkModified;
     CButton m_chkListView;
+    CButton m_btnSyncScan;
 
     void ApplyFilter();
 
@@ -144,5 +146,7 @@ protected:
     afx_msg void   OnSearchChange();
     afx_msg void   OnChkBackupOnly();
     afx_msg void   OnChkUnbacked();
+    afx_msg void   OnChkModified();
     afx_msg void   OnChkListView();
+    afx_msg void   OnBtnSyncScan();
 };

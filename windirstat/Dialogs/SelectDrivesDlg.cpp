@@ -326,12 +326,10 @@ BEGIN_MESSAGE_MAP(CSelectDrivesDlg, CLayoutDialogEx)
     ON_BN_CLICKED(IDC_RADIO_TARGET_DRIVES_ALL, OnBnClickedUpdateButtons)
     ON_BN_CLICKED(IDC_RADIO_TARGET_DRIVES_SUBSET, &CSelectDrivesDlg::OnBnClickedRadioTargetDrivesSubset)
     ON_BN_CLICKED(IDC_RADIO_TARGET_FOLDER, &CSelectDrivesDlg::OnBnClickedRadioTargetFolder)
-    ON_BN_CLICKED(IDC_RADIO_TARGET_BACKUP_SOURCES, &CSelectDrivesDlg::OnBnClickedRadioTargetBackupSources)
     ON_BN_CLICKED(IDC_SCAN_DUPLICATES, OnBnClickedUpdateButtons)
     ON_BN_DOUBLECLICKED(IDC_RADIO_TARGET_DRIVES_ALL, &CSelectDrivesDlg::OnBnDoubleclickedRadio)
     ON_BN_DOUBLECLICKED(IDC_RADIO_TARGET_DRIVES_SUBSET, &CSelectDrivesDlg::OnBnDoubleclickedRadio)
     ON_BN_DOUBLECLICKED(IDC_RADIO_TARGET_FOLDER, &CSelectDrivesDlg::OnBnDoubleclickedRadio)
-    ON_BN_DOUBLECLICKED(IDC_RADIO_TARGET_BACKUP_SOURCES, &CSelectDrivesDlg::OnBnDoubleclickedRadio)
     ON_CBN_EDITCHANGE(IDC_BROWSE_FOLDER, &CSelectDrivesDlg::OnEditchangeBrowseFolder)
     ON_CBN_SELCHANGE(IDC_BROWSE_FOLDER, &CSelectDrivesDlg::OnBnClickedUpdateButtons)
     ON_NOTIFY(LVN_ITEMCHANGED, IDC_TARGET_DRIVES_LIST, OnLvnItemChangedDrives)
@@ -358,7 +356,6 @@ BOOL CSelectDrivesDlg::OnInitDialog()
     m_layout.AddControl(IDC_TARGET_DRIVES_LIST, 0, 0, 1, 1);
     m_layout.AddControl(IDC_RADIO_TARGET_DRIVES_ALL, 0, 0, 1, 0);
     m_layout.AddControl(IDC_RADIO_TARGET_FOLDER, 0, 1, 0, 0);
-    m_layout.AddControl(IDC_RADIO_TARGET_BACKUP_SOURCES, 0, 1, 0, 0);
     m_layout.AddControl(IDC_BROWSE_BUTTON, 1, 1, 0, 0);
     m_layout.AddControl(IDC_BROWSE_FOLDER, 0, 1, 1, 0);
     m_layout.AddControl(IDC_FAST_SCAN_CHECKBOX, 0, 1, 1, 0);
@@ -490,25 +487,22 @@ void CSelectDrivesDlg::OnOK()
             COptions::SelectDrivesFolder.Obj().size()));
     }
 
-    if (m_radio == RADIO_TARGET_BACKUP_SOURCES)
+    for (const int i : std::views::iota(0, m_driveList.GetItemCount()))
     {
-        m_drives = COptions::BackupSourceFolders.Obj();
-    }
-    else
-    {
-        for (const int i : std::views::iota(0, m_driveList.GetItemCount()))
+        const CDriveItem* item = m_driveList.GetItem(i);
+        const bool selected = m_driveList.IsItemSelected(i);
+
+        // m_selectedDrives persists the user's manual selection across sessions
+        if (selected)
         {
-            const CDriveItem* item = m_driveList.GetItem(i);
-            const bool selected = m_driveList.IsItemSelected(i);
+            m_selectedDrives.emplace_back(item->GetDrive());
+        }
 
-            if (selected)
-                m_selectedDrives.emplace_back(item->GetDrive());
-
-            if ((m_radio == RADIO_TARGET_DRIVES_ALL && !item->IsRemote() && !item->IsSUBSTed()) ||
-                (m_radio == RADIO_TARGET_DRIVES_SUBSET && selected))
-            {
-                m_drives.emplace_back(item->GetDrive());
-            }
+        // m_drives is the set of paths actually handed to the scanner
+        if ((m_radio == RADIO_TARGET_DRIVES_ALL && !item->IsRemote() && !item->IsSUBSTed()) ||
+            (m_radio == RADIO_TARGET_DRIVES_SUBSET && selected))
+        {
+            m_drives.emplace_back(item->GetDrive());
         }
     }
 
@@ -543,9 +537,6 @@ void CSelectDrivesDlg::UpdateButtons()
             enableOk = (m_folderName.GetLength() >= 2 && m_folderName.Left(2) == L"\\\\") ||
                        FinderBasic::DoesFileExist(m_folderName.GetString());
         }
-        break;
-    case RADIO_TARGET_BACKUP_SOURCES:
-        enableOk = !COptions::BackupSourceFolders.Obj().empty();
         break;
     default:
         ASSERT(FALSE);
@@ -753,12 +744,7 @@ void CSelectDrivesDlg::OnEditchangeBrowseFolder()
     UpdateButtons();
 }
 
-void CSelectDrivesDlg::OnBnClickedRadioTargetBackupSources()
-{
-    UpdateButtons();
-}
-
 void CSelectDrivesDlg::SetActiveRadio(const int radio)
 {
-    CheckRadioButton(IDC_RADIO_TARGET_DRIVES_ALL, IDC_RADIO_TARGET_BACKUP_SOURCES, radio);
+    CheckRadioButton(IDC_RADIO_TARGET_DRIVES_ALL, IDC_RADIO_TARGET_FOLDER, radio);
 }

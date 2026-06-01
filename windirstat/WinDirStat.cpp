@@ -427,15 +427,8 @@ void CDirStatApp::OnFileOpen()
 
     if (CSelectDrivesDlg dlg; IDOK == dlg.DoModal())
     {
-        if (dlg.IsBackupSourcesMode())
-        {
-            CDirStatDoc::Get()->OpenBackupSources();
-        }
-        else
-        {
-            const std::wstring path = JoinString(dlg.GetSelectedItems());
-            m_pDocTemplate->OpenDocumentFile(path.c_str(), true);
-        }
+        const std::wstring path = JoinString(dlg.GetSelectedItems());
+        m_pDocTemplate->OpenDocumentFile(path.c_str(), true);
     }
 }
 

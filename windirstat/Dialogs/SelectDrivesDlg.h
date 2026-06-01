@@ -28,8 +28,7 @@ enum RADIO : std::uint8_t
 {
     RADIO_TARGET_DRIVES_ALL,
     RADIO_TARGET_DRIVES_SUBSET,
-    RADIO_TARGET_FOLDER,
-    RADIO_TARGET_BACKUP_SOURCES
+    RADIO_TARGET_FOLDER
 };
 
 class CDrivesList;
@@ -112,7 +111,6 @@ class CSelectDrivesDlg final : public CLayoutDialogEx
     ~CSelectDrivesDlg() override = default;
 
     std::vector<std::wstring> GetSelectedItems() const;
-    bool IsBackupSourcesMode() const { return m_radio == RADIO_TARGET_BACKUP_SOURCES; }
     void DoDataExchange(CDataExchange* pDX) override;
     BOOL OnInitDialog() override;
     void OnOK() override;
@@ -147,7 +145,6 @@ protected:
     afx_msg void OnSysColorChange();
     afx_msg void OnBnClickedRadioTargetDrivesSubset();
     afx_msg void OnBnClickedRadioTargetFolder();
-    afx_msg void OnBnClickedRadioTargetBackupSources();
     afx_msg void OnBnDoubleclickedRadio();
     afx_msg void OnNMSetfocusTargetDrivesList(NMHDR*, LRESULT* pResult);
     afx_msg HBRUSH OnCtlColor(CDC* pDC, CWnd* pWnd, UINT nCtlColor);

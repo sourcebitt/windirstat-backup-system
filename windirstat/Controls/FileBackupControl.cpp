@@ -22,6 +22,28 @@
 
 namespace fs = std::filesystem;
 
+// ---------------------------------------------------------------------------
+// Backup-specific persistent settings (declared in FileBackupControl.h).
+// Keeping these here avoids any modification to Options.h/cpp.
+// ---------------------------------------------------------------------------
+namespace backup {
+    Setting<std::vector<int>>          ColumnOrder  (L"BackupView", L"ColumnOrder");
+    Setting<std::vector<int>>          ColumnWidths (L"BackupView", L"ColumnWidths");
+    Setting<std::wstring>              Root         (L"BackupView", L"BackupRoot");
+    Setting<std::vector<std::wstring>> SourceFolders(L"BackupView", L"SourceFolders");
+}
+
+// ---------------------------------------------------------------------------
+// Local copy of CBackupEngine::FileTimeToUnix (private in BackupEngine.h).
+// Avoids making BackupEngine's private helpers public just for this file.
+// ---------------------------------------------------------------------------
+static double FileTimeToUnix(const fs::file_time_type t) noexcept
+{
+    using namespace std::chrono;
+    const auto sysTime = clock_cast<system_clock>(t);
+    return duration_cast<duration<double>>(sysTime.time_since_epoch()).count();
+}
+
 static std::wstring NormPath(std::wstring p)
 {
     for (auto& c : p) if (c == L'\\') c = L'/';
@@ -120,7 +142,7 @@ int CBackupDirItem::CompareSibling(const CTreeListItem* other, const int subitem
 int CBackupDirItem::GetTreeListChildCount() const
 {
     // Return 1 for unscanned lazy dirs so the expand arrow is shown.
-    if (m_needsDiskScan && !m_childrenLoaded) return 1;
+    if ((m_needsDiskScan || m_needsModifiedScan) && !m_childrenLoaded) return 1;
     return static_cast<int>(m_children.size());
 }
 
@@ -234,8 +256,8 @@ int CBackupFileItem::CompareSibling(const CTreeListItem* other, const int subite
 CFileBackupControl* CFileBackupControl::m_singleton = nullptr;
 
 CFileBackupControl::CFileBackupControl()
-    : CTreeListControl(COptions::BackupColumnOrder.Ptr(),
-                       COptions::BackupColumnWidths.Ptr(),
+    : CTreeListControl(backup::ColumnOrder.Ptr(),
+                       backup::ColumnWidths.Ptr(),
                        LF_BACKUPLIST, false)
 {
     SetOwnsItems(false); // tree nodes are owned by m_root, not the control
@@ -264,9 +286,10 @@ std::wstring CFileBackupControl::StatusString(const BackupNodeStatus s)
 {
     switch (s)
     {
-        case BackupNodeStatus::Backed:     return L"Backed";
+        case BackupNodeStatus::Backed:     return L"Backed Up";
+        case BackupNodeStatus::Modified:   return L"Modified";
         case BackupNodeStatus::BackupOnly: return L"Backup only";
-        case BackupNodeStatus::Unbacked:   return L"Not backed";
+        case BackupNodeStatus::Unbacked:   return L"Not backed up";
         case BackupNodeStatus::Partial:    return L"Partial";
         default:                           return {};
     }
@@ -274,11 +297,11 @@ std::wstring CFileBackupControl::StatusString(const BackupNodeStatus s)
 
 bool CFileBackupControl::EnsureEngine()
 {
-    const std::wstring root = COptions::BackupRoot.Obj();
+    const std::wstring root = backup::Root.Obj();
     if (root.empty()) return false;
     if (!m_engine)
     {
-        m_engine = std::make_unique<CBackupEngine>(root, COptions::BackupSourceFolders.Obj());
+        m_engine = std::make_unique<CBackupEngine>(root, backup::SourceFolders.Obj());
         if (!m_engine->Initialize())
         {
             m_engine.reset();
@@ -610,6 +633,201 @@ bool CFileBackupControl::PruneEmpty(CBackupDirItem* dir)
     return children.empty();
 }
 
+// Returns true when diskPath has changed relative to its manifest entry.
+// Uses mtime+size as a fast shortcut (same 2-second FAT32 tolerance as RunPass):
+// only reads the file to compute SHA-256 when mtime differs but size matches.
+static bool IsFileModified(const std::wstring& diskPath, const BackupFileEntry& entry)
+{
+    if (entry.currentHash.empty() || entry.versions.empty()) return false;
+    const auto& latest = entry.versions.back();
+
+    std::error_code ec;
+    const ULONGLONG diskSize = static_cast<ULONGLONG>(fs::file_size(diskPath, ec));
+    if (ec) return false;
+    if (diskSize != latest.size) return true; // Size differs → definitely modified
+
+    const double diskMtime = FileTimeToUnix(fs::last_write_time(diskPath, ec));
+    if (ec) return false;
+    if (std::abs(diskMtime - latest.mtime) < 2.0) return false; // mtime+size match → unchanged
+
+    // mtime differs but size matches → hash to confirm
+    const std::wstring computed = CBackupStore::ComputeFileSha256(diskPath);
+    return !computed.empty() && computed != entry.currentHash;
+}
+
+// Scans the manifest for any file under normPrefix that is modified.
+// Stops at the first hit (early exit) so the caller never pays for a full scan.
+static bool HasModifiedFileInSubtree(
+    const CBackupManifest& manifest, const std::wstring& normPrefix)
+{
+    const std::wstring prefix = normPrefix + L'/';
+    for (const auto& [normPath, entry] : manifest.GetFiles())
+    {
+        if (normPath.size() <= prefix.size() ||
+            _wcsnicmp(normPath.c_str(), prefix.c_str(), prefix.size()) != 0) continue;
+
+        std::wstring diskPath = normPath;
+        for (auto& c : diskPath) if (c == L'/') c = L'\\';
+        if (!fs::exists(diskPath)) continue;
+        if (IsFileModified(diskPath, entry)) return true; // early exit
+    }
+    return false;
+}
+
+// Lazy-populate a Modified-filter directory node:
+//   • direct file children → hash-checked; only Modified ones are added
+//   • direct sub-directories → added as lazy stubs only when HasModifiedFileInSubtree
+void CBackupDirItem::LoadModifiedFromManifest(
+    const CBackupManifest& manifest, const std::wstring& searchLower)
+{
+    m_children.clear();
+    const std::wstring prefix = m_path + L'/';
+    std::unordered_set<std::wstring> seenDirs;
+
+    for (const auto& [normPath, entry] : manifest.GetFiles())
+    {
+        if (normPath.size() <= prefix.size() ||
+            _wcsnicmp(normPath.c_str(), prefix.c_str(), prefix.size()) != 0) continue;
+
+        const std::wstring rel = normPath.substr(prefix.size());
+        const auto slashPos = rel.find(L'/');
+
+        if (slashPos == std::wstring::npos)
+        {
+            // Direct file child: check hash
+            std::wstring diskPath = normPath;
+            for (auto& c : diskPath) if (c == L'/') c = L'\\';
+            if (!fs::exists(diskPath)) continue;
+            if (!searchLower.empty() &&
+                ToLower(normPath).find(searchLower) == std::wstring::npos) continue;
+            if (!IsFileModified(diskPath, entry)) continue;
+
+            const auto& vs     = entry.versions;
+            const ULONGLONG sz = vs.empty() ? 0 : vs.back().size;
+            const std::wstring& ts = vs.empty() ? L"" : vs.back().backedUpAt;
+            auto child = std::make_unique<CBackupFileItem>(
+                normPath, rel, BackupNodeStatus::Modified, sz, ts);
+            child->SetParent(this);
+            m_children.push_back(std::move(child));
+        }
+        else
+        {
+            // Direct subdirectory: add as lazy Modified stub if it has any modified files
+            const std::wstring subdirName = rel.substr(0, slashPos);
+            const std::wstring subdirNorm = m_path + L'/' + subdirName;
+            if (seenDirs.insert(subdirNorm).second &&
+                HasModifiedFileInSubtree(manifest, subdirNorm))
+            {
+                auto stub = std::make_unique<CBackupDirItem>(subdirNorm, subdirName);
+                stub->m_needsModifiedScan = true;
+                stub->SetParent(this);
+                m_children.push_back(std::move(stub));
+            }
+        }
+    }
+
+    std::sort(m_children.begin(), m_children.end(),
+        [](const std::unique_ptr<CBackupTreeBase>& a,
+           const std::unique_ptr<CBackupTreeBase>& b)
+    {
+        if (a->IsDirectory() != b->IsDirectory())
+            return a->IsDirectory() > b->IsDirectory();
+        return _wcsicmp(a->GetPath().c_str(), b->GetPath().c_str()) < 0;
+    });
+
+    m_needsModifiedScan = false;
+    m_childrenLoaded    = true;
+}
+
+// BuildModifiedTree: lazily shows only source folders that contain at least one
+// modified file. Directory contents are loaded on expand via LoadModifiedFromManifest.
+std::unique_ptr<CBackupDirItem> CFileBackupControl::BuildModifiedTree(
+    const CBackupManifest& manifest,
+    const std::vector<std::wstring>& sourceFolders,
+    const std::wstring& searchLower)
+{
+    (void)searchLower; // search is applied per-directory on expand
+    auto root = std::make_unique<CBackupDirItem>(L"", L"Backup Sources");
+
+    for (const auto& sf : sourceFolders)
+    {
+        const std::wstring norm = NormPath(sf);
+        if (!HasModifiedFileInSubtree(manifest, norm)) continue;
+
+        auto sfNode = std::make_unique<CBackupDirItem>(norm, sf);
+        sfNode->m_needsModifiedScan = true;
+        root->AddChild(std::move(sfNode));
+    }
+
+    root->SortChildren();
+    return root;
+}
+
+// BuildModifiedFlatList: scans all manifest entries with the mtime+size fast check;
+// only files that are confirmed modified are added to the flat list.
+std::unique_ptr<CBackupDirItem> CFileBackupControl::BuildModifiedFlatList(
+    const CBackupManifest& manifest,
+    const std::vector<std::wstring>& sourceFolders,
+    const std::wstring& searchLower)
+{
+    auto root = std::make_unique<CBackupDirItem>(L"", L"Modified Files");
+
+    for (const auto& [normPath, entry] : manifest.GetFiles())
+    {
+        bool known = false;
+        for (const auto& sf : sourceFolders)
+        {
+            const std::wstring n = NormPath(sf);
+            if (normPath.size() > n.size() &&
+                _wcsnicmp(normPath.c_str(), n.c_str(), n.size()) == 0 &&
+                normPath[n.size()] == L'/') { known = true; break; }
+        }
+        if (!known) continue;
+
+        std::wstring diskPath = normPath;
+        for (auto& c : diskPath) if (c == L'/') c = L'\\';
+        if (!fs::exists(diskPath)) continue;
+        if (!IsFileModified(diskPath, entry)) continue;
+
+        if (!searchLower.empty() &&
+            ToLower(normPath).find(searchLower) == std::wstring::npos) continue;
+
+        const auto& vs     = entry.versions;
+        const ULONGLONG sz = vs.empty() ? 0 : vs.back().size;
+        const std::wstring& ts = vs.empty() ? L"" : vs.back().backedUpAt;
+        root->AddChild(std::make_unique<CBackupFileItem>(
+            normPath, ToDisplayPath(normPath), BackupNodeStatus::Modified, sz, ts));
+    }
+
+    root->SortChildren();
+    return root;
+}
+
+void CFileBackupControl::CheckHashesForChildren(
+    CBackupDirItem* dir, const CBackupManifest& manifest)
+{
+    bool anyChanged = false;
+    for (const auto& child : dir->m_children)
+    {
+        if (child->IsDirectory()) continue;
+        auto* file = static_cast<CBackupFileItem*>(child.get());
+        if (file->GetStatus() != BackupNodeStatus::Backed) continue;
+
+        const BackupFileEntry* entry = manifest.Find(file->GetPath());
+        if (!entry) continue;
+
+        std::wstring diskPath = file->GetPath();
+        for (auto& c : diskPath) if (c == L'/') c = L'\\';
+
+        if (IsFileModified(diskPath, *entry))
+        {
+            file->SetStatus(BackupNodeStatus::Modified);
+            anyChanged = true;
+        }
+    }
+    if (anyChanged) Invalidate();
+}
+
 void CFileBackupControl::Rebuild(const BackupFilter filter, const std::wstring& search)
 {
     m_filter      = filter;
@@ -622,7 +840,7 @@ void CFileBackupControl::Rebuild(const BackupFilter filter, const std::wstring& 
 
     if (!EnsureEngine()) return;
 
-    const auto& sourceFolders = COptions::BackupSourceFolders.Obj();
+    const auto& sourceFolders = backup::SourceFolders.Obj();
     if (sourceFolders.empty()) return;
 
     const CWaitCursor wc;
@@ -630,12 +848,18 @@ void CFileBackupControl::Rebuild(const BackupFilter filter, const std::wstring& 
     {
         if (filter == BackupFilter::Unbacked)
             m_root = BuildUnbackedFlatList(m_engine->GetManifest(), sourceFolders, m_searchLower);
+        else if (filter == BackupFilter::Modified)
+            m_root = BuildModifiedFlatList(m_engine->GetManifest(), sourceFolders, m_searchLower);
         else
             m_root = BuildFlatList(m_engine->GetManifest(), sourceFolders, filter, m_searchLower);
     }
     else if (filter == BackupFilter::Unbacked)
     {
         m_root = BuildUnbackedTree(m_engine->GetManifest(), sourceFolders, m_searchLower);
+    }
+    else if (filter == BackupFilter::Modified)
+    {
+        m_root = BuildModifiedTree(m_engine->GetManifest(), sourceFolders, m_searchLower);
     }
     else
     {
@@ -656,6 +880,14 @@ void CFileBackupControl::OnBeforeExpand(CTreeListItem* item)
     auto* dir = static_cast<CBackupDirItem*>(base);
     if (dir->NeedsDiskScan() && !dir->IsChildrenLoaded() && m_engine)
         dir->LoadChildrenFromDisk(m_engine->GetManifest(), m_searchLower);
+
+    if (dir->NeedsModifiedScan() && !dir->IsChildrenLoaded() && m_engine)
+        dir->LoadModifiedFromManifest(m_engine->GetManifest(), m_searchLower);
+
+    // In All mode: lazily hash-check backed children on expand so Modified files
+    // are discovered incrementally without a full upfront scan.
+    if (m_filter == BackupFilter::All && m_engine)
+        CheckHashesForChildren(dir, m_engine->GetManifest());
 }
 
 void CFileBackupControl::RunBackupPass()
@@ -720,12 +952,208 @@ void CFileBackupControl::OnContextMenu(CWnd*, CPoint pt)
         hitItem = static_cast<CBackupTreeBase*>(GetItem(hitIdx));
 
     const bool isBackupOnly = hitItem && hitItem->GetStatus() == BackupNodeStatus::BackupOnly;
+    const bool isUnbacked   = hitItem && hitItem->GetStatus() == BackupNodeStatus::Unbacked;
+
+    // Unbacked items exist on disk — show a WinDirStat-style context menu with
+    // open/delete/explore operations, plus the shell menu as a submenu.
+    if (isUnbacked)
+    {
+        std::vector<std::wstring> paths;
+        {
+            int si = GetNextItem(-1, LVNI_SELECTED);
+            while (si >= 0)
+            {
+                auto* sel = static_cast<CBackupTreeBase*>(GetItem(si));
+                if (sel && sel->GetStatus() == BackupNodeStatus::Unbacked)
+                    paths.push_back(NormToWinPath(sel->GetPath()));
+                si = GetNextItem(si, LVNI_SELECTED);
+            }
+        }
+        const std::wstring hitPath = NormToWinPath(hitItem->GetPath());
+        if (std::find(paths.begin(), paths.end(), hitPath) == paths.end())
+            paths.push_back(hitPath);
+
+        enum : UINT
+        {
+            ID_UB_OPEN            = 0x8001,
+            ID_UB_COPY_PATH,
+            ID_UB_EXPLORER_SELECT,
+            ID_UB_CMD_HERE,
+            ID_UB_PWSH_HERE,
+            ID_UB_PROPERTIES,
+            ID_UB_DELETE_PERM,
+            ID_UB_DELETE_BIN,
+        };
+
+        CMenu mainMenu;
+        mainMenu.CreatePopupMenu();
+        mainMenu.AppendMenu(MF_STRING,   ID_UB_OPEN,            L"Open");
+        mainMenu.AppendMenu(MF_SEPARATOR);
+        mainMenu.AppendMenu(MF_STRING,   ID_UB_COPY_PATH,        L"Copy Path");
+        mainMenu.AppendMenu(MF_STRING,   ID_UB_EXPLORER_SELECT,  L"Select in Explorer...");
+        mainMenu.AppendMenu(MF_STRING,   ID_UB_CMD_HERE,         L"Open in Command Prompt...");
+        mainMenu.AppendMenu(MF_STRING,   ID_UB_PWSH_HERE,        L"Open in PowerShell...");
+        mainMenu.AppendMenu(MF_SEPARATOR);
+        mainMenu.AppendMenu(MF_STRING,   ID_UB_PROPERTIES,       L"Properties");
+        mainMenu.AppendMenu(MF_SEPARATOR);
+        mainMenu.AppendMenu(MF_STRING,   ID_UB_DELETE_PERM,      L"Delete Permanently");
+        mainMenu.AppendMenu(MF_STRING,   ID_UB_DELETE_BIN,       L"Delete (to Recycle Bin)");
+
+        CComPtr<IContextMenu> shellMenu;
+        shellMenu.Attach(GetContextMenu(GetSafeHwnd(), paths));
+        if (shellMenu)
+        {
+            CMenu explorerSub;
+            explorerSub.CreatePopupMenu();
+            (void)shellMenu->QueryContextMenu(explorerSub.GetSafeHmenu(), 0,
+                CONTENT_MENU_MINCMD, CONTENT_MENU_MAXCMD, CMF_NORMAL);
+            mainMenu.AppendMenu(MF_SEPARATOR);
+            mainMenu.AppendMenu(MF_POPUP,
+                reinterpret_cast<UINT_PTR>(explorerSub.GetSafeHmenu()),
+                L"Windows Explorer Menu");
+            explorerSub.Detach(); // mainMenu now owns the submenu HMENU
+        }
+
+        const UINT id = static_cast<UINT>(mainMenu.TrackPopupMenu(
+            TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, this));
+
+        auto folderOf = [](const std::wstring& p) -> std::wstring
+        {
+            std::error_code ec;
+            if (fs::is_directory(p, ec)) return p;
+            const auto sl = p.find_last_of(L'\\');
+            return sl != std::wstring::npos ? p.substr(0, sl) : p;
+        };
+
+        switch (id)
+        {
+            case ID_UB_OPEN:
+                for (const auto& p : paths)
+                    ShellExecuteWrapper(p, L"", L"open", GetSafeHwnd());
+                break;
+
+            case ID_UB_COPY_PATH:
+            {
+                std::wstring text;
+                for (const auto& p : paths) { text += p; text += L"\r\n"; }
+                if (!text.empty()) text.resize(text.size() - 2);
+                if (OpenClipboard())
+                {
+                    EmptyClipboard();
+                    const SIZE_T bytes = (text.size() + 1) * sizeof(wchar_t);
+                    if (const HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes))
+                    {
+                        wmemcpy(static_cast<wchar_t*>(GlobalLock(hMem)),
+                            text.c_str(), text.size() + 1);
+                        GlobalUnlock(hMem);
+                        SetClipboardData(CF_UNICODETEXT, hMem);
+                    }
+                    CloseClipboard();
+                }
+                break;
+            }
+
+            case ID_UB_EXPLORER_SELECT:
+                for (const auto& p : paths)
+                    ShellExecuteWrapper(L"explorer.exe",
+                        L"/select,\"" + p + L"\"", L"open", GetSafeHwnd());
+                break;
+
+            case ID_UB_CMD_HERE:
+            {
+                std::unordered_set<std::wstring> seen;
+                for (const auto& p : paths)
+                {
+                    std::wstring dir = folderOf(p);
+                    if (seen.insert(dir).second)
+                        ShellExecuteWrapper(L"cmd.exe",
+                            L"/K TITLE WinDirStat - \"" + dir +
+                                L"\" && cd /d \"" + dir + L"\"",
+                            L"open", GetSafeHwnd(), dir);
+                }
+                break;
+            }
+
+            case ID_UB_PWSH_HERE:
+            {
+                static std::wstring pwsh(MAX_PATH, L'\0');
+                if (!pwsh.front())
+                    for (const auto exe : { L"pwsh.exe", L"powershell.exe" })
+                        if (SearchPath(nullptr, exe, nullptr,
+                            static_cast<DWORD>(pwsh.size()), pwsh.data(), nullptr) > 0)
+                        {
+                            pwsh.resize(wcslen(pwsh.data())); break;
+                        }
+                std::unordered_set<std::wstring> seen;
+                for (const auto& p : paths)
+                {
+                    std::wstring dir = folderOf(p);
+                    if (seen.insert(dir).second)
+                        ShellExecuteWrapper(pwsh, L"", L"open", GetSafeHwnd(), dir);
+                }
+                break;
+            }
+
+            case ID_UB_PROPERTIES:
+                for (const auto& p : paths)
+                {
+                    PIDLIST_ABSOLUTE pidl = ILCreateFromPath(p.c_str());
+                    if (!pidl) continue;
+                    SHELLEXECUTEINFO sei{};
+                    sei.cbSize   = sizeof(sei);
+                    sei.hwnd     = GetSafeHwnd();
+                    sei.lpVerb   = L"properties";
+                    sei.fMask    = SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST |
+                                   SEE_MASK_NOZONECHECKS;
+                    sei.lpIDList = pidl;
+                    sei.nShow    = SW_SHOWNORMAL;
+                    ShellExecuteEx(&sei);
+                    ILFree(pidl);
+                }
+                break;
+
+            case ID_UB_DELETE_PERM:
+            case ID_UB_DELETE_BIN:
+            {
+                std::wstring pathList;
+                for (const auto& p : paths) { pathList += p; pathList += L'\0'; }
+                pathList += L'\0';
+                SHFILEOPSTRUCTW op{};
+                op.hwnd   = GetSafeHwnd();
+                op.wFunc  = FO_DELETE;
+                op.pFrom  = pathList.c_str();
+                op.fFlags = (id == ID_UB_DELETE_BIN)
+                    ? static_cast<FILEOP_FLAGS>(FOF_ALLOWUNDO | FOF_WANTNUKEWARNING)
+                    : static_cast<FILEOP_FLAGS>(FOF_WANTNUKEWARNING);
+                if (SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted)
+                    Rebuild(m_filter, m_searchLower);
+                break;
+            }
+
+            default:
+                if (shellMenu && id >= CONTENT_MENU_MINCMD && id <= CONTENT_MENU_MAXCMD)
+                {
+                    CMINVOKECOMMANDINFOEX info{};
+                    info.cbSize  = sizeof(info);
+                    info.fMask   = CMIC_MASK_UNICODE;
+                    info.hwnd    = GetSafeHwnd();
+                    info.lpVerb  = MAKEINTRESOURCEA(id - CONTENT_MENU_MINCMD);
+                    info.lpVerbW = MAKEINTRESOURCEW(id - CONTENT_MENU_MINCMD);
+                    info.nShow   = SW_SHOWNORMAL;
+                    (void)shellMenu->InvokeCommand(
+                        reinterpret_cast<LPCMINVOKECOMMANDINFO>(&info));
+                    Rebuild(m_filter, m_searchLower);
+                }
+                break;
+        }
+        return;
+    }
 
     CMenu menu;
     menu.CreatePopupMenu();
     menu.AppendMenu(MF_STRING, ID_RUN_PASS,       L"Run Backup Pass");
     menu.AppendMenu(MF_SEPARATOR);
-    const std::wstring& curRoot = COptions::BackupRoot.Obj();
+    const std::wstring& curRoot = backup::Root.Obj();
     const std::wstring rootLabel = L"Set Backup Root... [" +
         (curRoot.empty() ? L"not set" : curRoot) + L"]";
     menu.AppendMenu(MF_STRING, ID_SET_ROOT, rootLabel.c_str());
@@ -753,7 +1181,7 @@ void CFileBackupControl::OnContextMenu(CWnd*, CPoint pt)
             const std::wstring root = BrowseForFolder(L"Select Backup Root Folder");
             if (!root.empty())
             {
-                COptions::BackupRoot = root;
+                backup::Root = root;
                 m_engine.reset();
                 Rebuild(m_filter, m_searchLower);
             }
@@ -859,8 +1287,13 @@ void CFileBackupControl::OnContextMenu(CWnd*, CPoint pt)
                 {
                     if (item->IsDirectory())
                     {
-                        auto sub = CollectManifestPaths(manifest, item->GetPath());
-                        toPurge.insert(toPurge.end(), sub.begin(), sub.end());
+                        for (const auto& p : CollectManifestPaths(manifest, item->GetPath()))
+                        {
+                            std::wstring diskPath = p;
+                            for (auto& c : diskPath) if (c == L'/') c = L'\\';
+                            if (!fs::exists(diskPath))
+                                toPurge.push_back(p);
+                        }
                     }
                     else
                     {

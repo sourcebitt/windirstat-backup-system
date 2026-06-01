@@ -18,8 +18,32 @@
 #pragma once
 
 #include "pch.h"
+#include <shobjidl.h>   // IFileOpenDialog — not in pch.h to keep the core header clean
 #include "TreeListControl.h"
 #include "BackupEngine.h"
+#include "Property.h"
+
+// ---------------------------------------------------------------------------
+// Backup-specific persistent settings — defined in FileBackupControl.cpp.
+// Declared here (not in Options.h/cpp) to keep the core settings file clean.
+// ---------------------------------------------------------------------------
+namespace backup {
+    extern Setting<std::vector<int>>          ColumnOrder;
+    extern Setting<std::vector<int>>          ColumnWidths;
+    extern Setting<std::wstring>              Root;
+    extern Setting<std::vector<std::wstring>> SourceFolders;
+}
+
+// ---------------------------------------------------------------------------
+// Control IDs for the backup tab — defined here instead of resource.h so the
+// core resource file stays untouched by the backup integration.
+// ---------------------------------------------------------------------------
+#define IDC_BACKUP_SEARCH               1129
+#define IDC_BACKUP_FILTER_BACKUPONLY    1130
+#define IDC_BACKUP_FILTER_UNBACKED      1131
+#define IDC_BACKUP_VIEW_TOGGLE          1132
+#define IDC_BACKUP_FILTER_MODIFIED      1135
+#define IDC_BACKUP_SYNC_SCAN            1136
 
 // Column indices (must match insertion order in CFileBackupView::OnCreate)
 using ITEMBAKCOLUMNS = enum : std::uint8_t
@@ -34,12 +58,14 @@ enum class BackupFilter : std::uint8_t
 {
     All,        // Show everything in the manifest as a browsable tree
     BackupOnly, // Show only manifest entries whose path no longer exists on disk
+    Modified,   // Show only manifest entries that exist on disk but have a changed hash
     Unbacked,   // Show only files on disk that are not in the manifest (lazy per-dir)
 };
 
 enum class BackupNodeStatus : std::uint8_t
 {
     Backed,
+    Modified,   // In manifest and on disk, but current hash differs from stored hash
     BackupOnly, // In manifest, missing from disk
     Unbacked,   // On disk, not in manifest
     Partial,    // Directory containing mixed children
@@ -76,8 +102,12 @@ public:
     // Called by CFileBackupControl::OnBeforeExpand for Unbacked lazy dirs
     void LoadChildrenFromDisk(const CBackupManifest& manifest, const std::wstring& searchLower);
 
-    bool IsChildrenLoaded() const noexcept { return m_childrenLoaded; }
-    bool NeedsDiskScan()    const noexcept { return m_needsDiskScan; }
+    // Called by CFileBackupControl::OnBeforeExpand for Modified filter lazy dirs
+    void LoadModifiedFromManifest(const CBackupManifest& manifest, const std::wstring& searchLower);
+
+    bool IsChildrenLoaded()   const noexcept { return m_childrenLoaded; }
+    bool NeedsDiskScan()      const noexcept { return m_needsDiskScan; }
+    bool NeedsModifiedScan()  const noexcept { return m_needsModifiedScan; }
 
     // CBackupTreeBase
     bool IsDirectory() const override { return true; }
@@ -97,8 +127,9 @@ private:
     std::wstring m_path;  // normalized (forward slashes)
     std::wstring m_name;  // display label
     std::vector<std::unique_ptr<CBackupTreeBase>> m_children;
-    bool m_childrenLoaded = false;
-    bool m_needsDiskScan  = false; // true → lazy load from disk on expand
+    bool m_childrenLoaded    = false;
+    bool m_needsDiskScan     = false; // true → lazy scan disk for unbacked files on expand
+    bool m_needsModifiedScan = false; // true → lazy scan manifest+hash for modified files
 };
 
 // ---------------------------------------------------------------------------
@@ -114,6 +145,7 @@ public:
     bool IsDirectory() const override { return false; }
     const std::wstring& GetPath() const override { return m_path; }
     BackupNodeStatus GetStatus() const override { return m_status; }
+    void SetStatus(BackupNodeStatus s) noexcept { m_status = s; }
     HICON GetIcon() override;
 
     std::wstring GetText(int subitem) const override;
@@ -187,6 +219,21 @@ protected:
         const CBackupManifest& manifest,
         const std::vector<std::wstring>& sourceFolders,
         const std::wstring& searchLower);
+
+    // Build tree / flat list of manifest entries that exist on disk with a changed hash.
+    std::unique_ptr<CBackupDirItem> BuildModifiedTree(
+        const CBackupManifest& manifest,
+        const std::vector<std::wstring>& sourceFolders,
+        const std::wstring& searchLower);
+
+    std::unique_ptr<CBackupDirItem> BuildModifiedFlatList(
+        const CBackupManifest& manifest,
+        const std::vector<std::wstring>& sourceFolders,
+        const std::wstring& searchLower);
+
+    // Hash-check Backed file children of dir; update status to Modified where needed.
+    // Called from OnBeforeExpand in All mode for lazy on-expand detection.
+    void CheckHashesForChildren(CBackupDirItem* dir, const CBackupManifest& manifest);
 
     // Prune dirs that ended up empty after filtering.
     static bool PruneEmpty(CBackupDirItem* dir);

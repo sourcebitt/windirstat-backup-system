@@ -18,6 +18,7 @@
 #include "pch.h"
 #include "FileTreeView.h"
 #include "DarkMode.h"
+#include "Filtering.h"
 
 IMPLEMENT_DYNCREATE(CFileTreeView, CControlView)
 
@@ -203,7 +204,9 @@ BEGIN_MESSAGE_MAP(CFileBackupView, CControlView)
     ON_EN_CHANGE(IDC_BACKUP_SEARCH,            &CFileBackupView::OnSearchChange)
     ON_BN_CLICKED(IDC_BACKUP_FILTER_BACKUPONLY, &CFileBackupView::OnChkBackupOnly)
     ON_BN_CLICKED(IDC_BACKUP_FILTER_UNBACKED,   &CFileBackupView::OnChkUnbacked)
+    ON_BN_CLICKED(IDC_BACKUP_FILTER_MODIFIED,   &CFileBackupView::OnChkModified)
     ON_BN_CLICKED(IDC_BACKUP_VIEW_TOGGLE,       &CFileBackupView::OnChkListView)
+    ON_BN_CLICKED(IDC_BACKUP_SYNC_SCAN,         &CFileBackupView::OnBtnSyncScan)
 END_MESSAGE_MAP()
 
 int CFileBackupView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
@@ -218,11 +221,17 @@ int CFileBackupView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
     m_chkBackupOnly.Create(L"Backup only", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
         CRect(0, 0, 1, 1), this, IDC_BACKUP_FILTER_BACKUPONLY);
 
-    m_chkUnbacked.Create(L"Not backed", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+    m_chkUnbacked.Create(L"Not backed up", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
         CRect(0, 0, 1, 1), this, IDC_BACKUP_FILTER_UNBACKED);
+
+    m_chkModified.Create(L"Modified", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        CRect(0, 0, 1, 1), this, IDC_BACKUP_FILTER_MODIFIED);
 
     m_chkListView.Create(L"List view", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
         CRect(0, 0, 1, 1), this, IDC_BACKUP_VIEW_TOGGLE);
+
+    m_btnSyncScan.Create(L"Sync Scan", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        CRect(0, 0, 1, 1), this, IDC_BACKUP_SYNC_SCAN);
 
     // Apply dark-mode theming to the strip controls
     DarkMode::AdjustControls(GetSafeHwnd());
@@ -252,13 +261,15 @@ void CFileBackupView::OnSize(UINT nType, const int cx, const int cy)
 
     if (!IsWindow(m_searchEdit.m_hWnd)) return;
 
-    // Strip layout: [Search | Backup only | Not backed | List view]
+    // Strip layout: [Search | Backup only | Not backed up | Modified | List view | Sync Scan]
     constexpr int PAD       = 4;
     constexpr int H         = STRIP_H - 2 * PAD;
     constexpr int SRCH      = 180;
-    constexpr int CHK_BACK  = 125; // "Backup only" needs extra room
-    constexpr int CHK_UNB   = 110; // "Not backed"
+    constexpr int CHK_BACK  = 125; // "Backup only"
+    constexpr int CHK_UNB   = 148; // "Not backed up" (wider + natural gap before Modified)
+    constexpr int CHK_MOD   = 100; // "Modified"
     constexpr int LST       = 90;  // "List view"
+    constexpr int BTN_SYNC  = 85;  // "Sync Scan"
 
     int x = PAD;
     m_searchEdit.MoveWindow(x, PAD, SRCH, H);
@@ -267,7 +278,11 @@ void CFileBackupView::OnSize(UINT nType, const int cx, const int cy)
     x += CHK_BACK + PAD;
     m_chkUnbacked.MoveWindow(x, PAD, CHK_UNB, H);
     x += CHK_UNB + PAD;
+    m_chkModified.MoveWindow(x, PAD, CHK_MOD, H);
+    x += CHK_MOD + PAD;
     m_chkListView.MoveWindow(x, PAD, LST, H);
+    x += LST + PAD;
+    m_btnSyncScan.MoveWindow(x, PAD, BTN_SYNC, H);
 
     if (IsWindow(m_control.m_hWnd))
         m_control.MoveWindow(0, STRIP_H, cx, std::max(0, cy - STRIP_H));
@@ -306,13 +321,13 @@ void CFileBackupView::ApplyFilter()
 {
     const bool backupOnly = (m_chkBackupOnly.GetCheck() == BST_CHECKED);
     const bool unbacked   = (m_chkUnbacked.GetCheck()   == BST_CHECKED);
+    const bool modified   = (m_chkModified.GetCheck()   == BST_CHECKED);
     const bool listMode   = (m_chkListView.GetCheck()   == BST_CHECKED);
 
     BackupFilter filter = BackupFilter::All;
-    if (backupOnly && !unbacked) filter = BackupFilter::BackupOnly;
-    if (unbacked   && !backupOnly) filter = BackupFilter::Unbacked;
-    // Both checked: show All
-    if (backupOnly && unbacked) filter = BackupFilter::All;
+    if (backupOnly) filter = BackupFilter::BackupOnly;
+    else if (unbacked) filter = BackupFilter::Unbacked;
+    else if (modified) filter = BackupFilter::Modified;
 
     CString searchText;
     m_searchEdit.GetWindowText(searchText);
@@ -328,23 +343,81 @@ void CFileBackupView::OnSearchChange()
 
 void CFileBackupView::OnChkBackupOnly()
 {
-    // Mutually exclusive with Unbacked
     if (m_chkBackupOnly.GetCheck() == BST_CHECKED)
+    {
         m_chkUnbacked.SetCheck(BST_UNCHECKED);
+        m_chkModified.SetCheck(BST_UNCHECKED);
+    }
     ApplyFilter();
 }
 
 void CFileBackupView::OnChkUnbacked()
 {
-    // Mutually exclusive with BackupOnly
     if (m_chkUnbacked.GetCheck() == BST_CHECKED)
+    {
         m_chkBackupOnly.SetCheck(BST_UNCHECKED);
+        m_chkModified.SetCheck(BST_UNCHECKED);
+    }
+    ApplyFilter();
+}
+
+void CFileBackupView::OnChkModified()
+{
+    if (m_chkModified.GetCheck() == BST_CHECKED)
+    {
+        m_chkBackupOnly.SetCheck(BST_UNCHECKED);
+        m_chkUnbacked.SetCheck(BST_UNCHECKED);
+    }
     ApplyFilter();
 }
 
 void CFileBackupView::OnChkListView()
 {
     ApplyFilter();
+}
+
+void CFileBackupView::OnBtnSyncScan()
+{
+    const auto& folders = backup::SourceFolders.Obj();
+    if (folders.empty())
+    {
+        AfxMessageBox(L"No backup source folders are configured.", MB_ICONINFORMATION);
+        return;
+    }
+
+    // Build newline-delimited string for FilteringIncludeDirs (same format PageFiltering uses).
+    std::wstring includeStr;
+    for (const auto& f : folders)
+    {
+        if (!includeStr.empty()) includeStr += L'\n';
+        includeStr += f;
+    }
+    COptions::FilteringIncludeDirs.Obj() = includeStr;
+    COptions::FilteringIncludeDirs.WritePersistedProperty();
+
+    // Prepend each source folder to the SelectDrivesFolder MRU so they appear
+    // at the top of the folder combo in the scan dialog.
+    auto& mru = COptions::SelectDrivesFolder.Obj();
+    for (auto it = folders.rbegin(); it != folders.rend(); ++it)
+    {
+        std::erase_if(mru, [&it](const std::wstring& s)
+            { return _wcsicmp(s.c_str(), it->c_str()) == 0; });
+        mru.insert(mru.begin(), *it);
+    }
+    const auto maxHist = static_cast<std::size_t>(COptions::FolderHistoryCount.Obj());
+    if (mru.size() > maxHist) mru.resize(maxHist);
+    COptions::SelectDrivesFolder.WritePersistedProperty();
+
+    // Apply the updated include filter to the running scan immediately.
+    CFiltering::CompileFilters();
+
+    const std::wstring msg =
+        std::to_wstring(folders.size()) + L" folder(s) written to scan settings.\n\n"
+        L"FilteringIncludeDirs  ← backup sources\n"
+        L"SelectDrivesFolder    ← backup sources\n\n"
+        L"Re-open the scan dialog (File › Open) to pick a source folder,\n"
+        L"or re-scan to apply the include filter to the current tree.";
+    AfxMessageBox(msg.c_str(), MB_ICONINFORMATION);
 }
 
 void CFileBackupView::OnUpdate(CView* /*pSender*/, const LPARAM lHint, CObject* /*pHint*/)

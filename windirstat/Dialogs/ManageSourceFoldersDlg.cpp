@@ -19,6 +19,7 @@
 #include "ManageSourceFoldersDlg.h"
 #include "Options.h"
 #include "resource.h"
+#include "../Controls/FileBackupControl.h"
 
 IMPLEMENT_DYNAMIC(CManageSourceFoldersDlg, CDialogEx)
 
@@ -43,7 +44,7 @@ BOOL CManageSourceFoldersDlg::OnInitDialog()
 {
     CDialogEx::OnInitDialog();
 
-    for (const auto& folder : COptions::BackupSourceFolders.Obj())
+    for (const auto& folder : backup::SourceFolders.Obj())
         m_listBox.AddString(folder.c_str());
 
     GetDlgItem(IDC_REMOVE_SOURCE_FOLDER)->EnableWindow(FALSE);
@@ -61,7 +62,7 @@ void CManageSourceFoldersDlg::OnOK()
         m_listBox.GetText(i, s);
         folders.emplace_back(s.GetString());
     }
-    COptions::BackupSourceFolders = folders;
+    backup::SourceFolders = folders;
     CDialogEx::OnOK();
 }
 

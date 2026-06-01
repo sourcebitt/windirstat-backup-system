@@ -182,6 +182,14 @@ public:
 
     static std::wstring StatusString(BackupNodeStatus s);
 
+    // Returns true if at least one selected item has Unbacked status (file exists on disk).
+    // Lightweight — used by toolbar Update-UI handlers to avoid building a full path list.
+    bool HasSelectedUnbackedItems() const;
+
+    // Returns the Windows-path strings of all selected Unbacked items.
+    // Used by toolbar command handlers to operate on those files.
+    std::vector<std::wstring> GetSelectedUnbackedPaths() const;
+
 protected:
     static CFileBackupControl* m_singleton;
 

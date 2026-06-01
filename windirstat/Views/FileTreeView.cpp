@@ -207,7 +207,7 @@ BEGIN_MESSAGE_MAP(CFileBackupView, CControlView)
     ON_BN_CLICKED(IDC_BACKUP_FILTER_MODIFIED,   &CFileBackupView::OnChkModified)
     ON_BN_CLICKED(IDC_BACKUP_VIEW_TOGGLE,       &CFileBackupView::OnChkListView)
     ON_BN_CLICKED(IDC_BACKUP_SYNC_SCAN,         &CFileBackupView::OnBtnSyncScan)
-    // Disable main-tree toolbar commands when the backup tab is active.
+    // Always-disabled: scan/rescan/search/filter/permanent-delete are main-tree-only.
     ON_UPDATE_COMMAND_UI(ID_SCAN_RESUME,             &CFileBackupView::OnUpdateDisableInBackup)
     ON_UPDATE_COMMAND_UI(ID_SCAN_SUSPEND,            &CFileBackupView::OnUpdateDisableInBackup)
     ON_UPDATE_COMMAND_UI(ID_SCAN_STOP,               &CFileBackupView::OnUpdateDisableInBackup)
@@ -215,13 +215,20 @@ BEGIN_MESSAGE_MAP(CFileBackupView, CControlView)
     ON_UPDATE_COMMAND_UI(ID_REFRESH_SELECTED,        &CFileBackupView::OnUpdateDisableInBackup)
     ON_UPDATE_COMMAND_UI(ID_SEARCH,                  &CFileBackupView::OnUpdateDisableInBackup)
     ON_UPDATE_COMMAND_UI(ID_FILTER,                  &CFileBackupView::OnUpdateDisableInBackup)
-    ON_UPDATE_COMMAND_UI(ID_CLEANUP_OPEN_SELECTED,   &CFileBackupView::OnUpdateDisableInBackup)
-    ON_UPDATE_COMMAND_UI(ID_CLEANUP_EXPLORER_SELECT, &CFileBackupView::OnUpdateDisableInBackup)
-    ON_UPDATE_COMMAND_UI(ID_EDIT_COPY_CLIPBOARD,     &CFileBackupView::OnUpdateDisableInBackup)
-    ON_UPDATE_COMMAND_UI(ID_CLEANUP_OPEN_IN_CONSOLE, &CFileBackupView::OnUpdateDisableInBackup)
-    ON_UPDATE_COMMAND_UI(ID_CLEANUP_PROPERTIES,      &CFileBackupView::OnUpdateDisableInBackup)
-    ON_UPDATE_COMMAND_UI(ID_CLEANUP_DELETE_BIN,      &CFileBackupView::OnUpdateDisableInBackup)
     ON_UPDATE_COMMAND_UI(ID_CLEANUP_DELETE,          &CFileBackupView::OnUpdateDisableInBackup)
+    // Conditionally enabled when Unbacked (on-disk) items are selected.
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_OPEN_SELECTED,   &CFileBackupView::OnUpdateFileOpOnUnbacked)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_EXPLORER_SELECT, &CFileBackupView::OnUpdateFileOpOnUnbacked)
+    ON_UPDATE_COMMAND_UI(ID_EDIT_COPY_CLIPBOARD,     &CFileBackupView::OnUpdateFileOpOnUnbacked)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_OPEN_IN_CONSOLE, &CFileBackupView::OnUpdateFileOpOnUnbacked)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_PROPERTIES,      &CFileBackupView::OnUpdateFileOpOnUnbacked)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_DELETE_BIN,      &CFileBackupView::OnUpdateFileOpOnUnbacked)
+    ON_COMMAND(ID_CLEANUP_OPEN_SELECTED,             &CFileBackupView::OnCleanupOpenSelected)
+    ON_COMMAND(ID_CLEANUP_EXPLORER_SELECT,           &CFileBackupView::OnCleanupExplorerSelect)
+    ON_COMMAND(ID_EDIT_COPY_CLIPBOARD,               &CFileBackupView::OnEditCopyClipboard)
+    ON_COMMAND(ID_CLEANUP_OPEN_IN_CONSOLE,           &CFileBackupView::OnCleanupOpenInConsole)
+    ON_COMMAND(ID_CLEANUP_PROPERTIES,                &CFileBackupView::OnCleanupProperties)
+    ON_COMMAND(ID_CLEANUP_DELETE_BIN,                &CFileBackupView::OnCleanupDeleteBin)
 END_MESSAGE_MAP()
 
 int CFileBackupView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
@@ -296,7 +303,7 @@ void CFileBackupView::OnSize(UINT nType, const int cx, const int cy)
     m_chkModified.MoveWindow(x, PAD, CHK_MOD, H);
     x += CHK_MOD + PAD;
     m_chkListView.MoveWindow(x, PAD, LST, H);
-    x += LST + PAD;
+    x += LST + PAD * 3; // wider gap — Sync Scan is a distinct action, not a filter
     m_btnSyncScan.MoveWindow(x, PAD, BTN_SYNC, H);
 
     if (IsWindow(m_control.m_hWnd))
@@ -394,6 +401,104 @@ void CFileBackupView::OnChkListView()
 void CFileBackupView::OnUpdateDisableInBackup(CCmdUI* pCmdUI)
 {
     pCmdUI->Enable(FALSE);
+}
+
+void CFileBackupView::OnUpdateFileOpOnUnbacked(CCmdUI* pCmdUI)
+{
+    const CFileBackupControl* ctrl = CFileBackupControl::Get();
+    pCmdUI->Enable(ctrl && ctrl->HasSelectedUnbackedItems());
+}
+
+void CFileBackupView::OnCleanupOpenSelected()
+{
+    const CFileBackupControl* ctrl = CFileBackupControl::Get();
+    if (!ctrl) return;
+    for (const auto& p : ctrl->GetSelectedUnbackedPaths())
+        ShellExecuteWrapper(p, L"", L"open", ctrl->GetSafeHwnd());
+}
+
+void CFileBackupView::OnCleanupExplorerSelect()
+{
+    const CFileBackupControl* ctrl = CFileBackupControl::Get();
+    if (!ctrl) return;
+    for (const auto& p : ctrl->GetSelectedUnbackedPaths())
+        ShellExecuteWrapper(L"explorer.exe", L"/select,\"" + p + L"\"", L"open", ctrl->GetSafeHwnd());
+}
+
+void CFileBackupView::OnEditCopyClipboard()
+{
+    const CFileBackupControl* ctrl = CFileBackupControl::Get();
+    if (!ctrl) return;
+    const auto paths = ctrl->GetSelectedUnbackedPaths();
+    std::wstring text;
+    for (const auto& p : paths) { text += p; text += L"\r\n"; }
+    if (!text.empty()) text.resize(text.size() - 2);
+    if (OpenClipboard())
+    {
+        EmptyClipboard();
+        const SIZE_T bytes = (text.size() + 1) * sizeof(wchar_t);
+        if (const HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes))
+        {
+            wmemcpy(static_cast<wchar_t*>(GlobalLock(hMem)), text.c_str(), text.size() + 1);
+            GlobalUnlock(hMem);
+            SetClipboardData(CF_UNICODETEXT, hMem);
+        }
+        CloseClipboard();
+    }
+}
+
+void CFileBackupView::OnCleanupOpenInConsole()
+{
+    const CFileBackupControl* ctrl = CFileBackupControl::Get();
+    if (!ctrl) return;
+    std::unordered_set<std::wstring> seen;
+    for (const auto& p : ctrl->GetSelectedUnbackedPaths())
+    {
+        std::error_code ec;
+        const std::wstring dir = std::filesystem::is_directory(p, ec)
+            ? p : std::filesystem::path(p).parent_path().wstring();
+        if (seen.insert(dir).second)
+            ShellExecuteWrapper(L"cmd.exe",
+                L"/K cd /d \"" + dir + L"\"", L"open", ctrl->GetSafeHwnd(), dir);
+    }
+}
+
+void CFileBackupView::OnCleanupProperties()
+{
+    const CFileBackupControl* ctrl = CFileBackupControl::Get();
+    if (!ctrl) return;
+    for (const auto& p : ctrl->GetSelectedUnbackedPaths())
+    {
+        PIDLIST_ABSOLUTE pidl = ILCreateFromPath(p.c_str());
+        if (!pidl) continue;
+        SHELLEXECUTEINFO sei{};
+        sei.cbSize   = sizeof(sei);
+        sei.hwnd     = ctrl->GetSafeHwnd();
+        sei.lpVerb   = L"properties";
+        sei.fMask    = SEE_MASK_INVOKEIDLIST | SEE_MASK_IDLIST | SEE_MASK_NOZONECHECKS;
+        sei.lpIDList = pidl;
+        sei.nShow    = SW_SHOWNORMAL;
+        ShellExecuteEx(&sei);
+        ILFree(pidl);
+    }
+}
+
+void CFileBackupView::OnCleanupDeleteBin()
+{
+    CFileBackupControl* ctrl = CFileBackupControl::Get();
+    if (!ctrl) return;
+    const auto paths = ctrl->GetSelectedUnbackedPaths();
+    if (paths.empty()) return;
+    std::wstring pathList;
+    for (const auto& p : paths) { pathList += p; pathList += L'\0'; }
+    pathList += L'\0';
+    SHFILEOPSTRUCTW op{};
+    op.hwnd   = ctrl->GetSafeHwnd();
+    op.wFunc  = FO_DELETE;
+    op.pFrom  = pathList.c_str();
+    op.fFlags = FOF_ALLOWUNDO | FOF_WANTNUKEWARNING;
+    if (SHFileOperationW(&op) == 0 && !op.fAnyOperationsAborted)
+        ApplyFilter(); // rebuild view to reflect the now-absent files
 }
 
 void CFileBackupView::OnBtnSyncScan()

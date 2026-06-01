@@ -282,6 +282,33 @@ void CFileBackupControl::OnDestroy()
     CWdsListControl::OnDestroy();
 }
 
+bool CFileBackupControl::HasSelectedUnbackedItems() const
+{
+    int si = GetNextItem(-1, LVNI_SELECTED);
+    while (si >= 0)
+    {
+        const auto* item = static_cast<const CBackupTreeBase*>(GetItem(si));
+        if (item && item->GetStatus() == BackupNodeStatus::Unbacked)
+            return true;
+        si = GetNextItem(si, LVNI_SELECTED);
+    }
+    return false;
+}
+
+std::vector<std::wstring> CFileBackupControl::GetSelectedUnbackedPaths() const
+{
+    std::vector<std::wstring> paths;
+    int si = GetNextItem(-1, LVNI_SELECTED);
+    while (si >= 0)
+    {
+        const auto* item = static_cast<const CBackupTreeBase*>(GetItem(si));
+        if (item && item->GetStatus() == BackupNodeStatus::Unbacked)
+            paths.push_back(NormToShellPath(item->GetPath())); // same as NormToWinPath, defined earlier
+        si = GetNextItem(si, LVNI_SELECTED);
+    }
+    return paths;
+}
+
 std::wstring CFileBackupControl::StatusString(const BackupNodeStatus s)
 {
     switch (s)

@@ -150,4 +150,12 @@ protected:
     afx_msg void   OnChkListView();
     afx_msg void   OnBtnSyncScan();
     afx_msg void   OnUpdateDisableInBackup(CCmdUI* pCmdUI);
+    // Toolbar commands enabled for selected Unbacked (on-disk) items
+    afx_msg void   OnUpdateFileOpOnUnbacked(CCmdUI* pCmdUI);
+    afx_msg void   OnCleanupOpenSelected();
+    afx_msg void   OnCleanupExplorerSelect();
+    afx_msg void   OnEditCopyClipboard();
+    afx_msg void   OnCleanupOpenInConsole();
+    afx_msg void   OnCleanupProperties();
+    afx_msg void   OnCleanupDeleteBin();
 };

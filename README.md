@@ -1,10 +1,23 @@
 # WinDirStat - Windows Directory Statistics
 
-## TAKE NOTE - FILE BACKUP VERSION - NOT THE REGULAR WINDIRSTAT.
+## This build adds incremental file backup to WinDirStat
 
-This version can select for analysis a specific group of chosen directories on a computer (avoiding the need to look at system directories) and to backup this specific group of directories to a desired location in a compact format (hash based backup with an index).
+This is a modified build of WinDirStat that extends it with an incremental, content-addressed backup system. It lets you define a set of source folders to monitor and back up, then tracks which files have been backed up, which have been modified since the last backup, and which have never been backed up — all from a dedicated Backup tab inside the familiar WinDirStat interface.
 
-I tried to modify the original windirstat to a minimum, so most of backup functions are within the new backup tab.
+The backup store uses SHA-256 hashing to avoid storing duplicate content: if the same file exists in two locations, or if a file is moved or renamed, only one copy of the data is kept. Backup passes are incremental — files whose size and modification time have not changed are skipped without re-hashing.
+
+Modifications to the original WinDirStat source are kept to a minimum. Almost all backup functionality lives in new files (`BackupEngine`, `BackupManifest`, `BackupStore`, `FileBackupControl`) and the new Backup tab view. The handful of changes to existing files are limited to wiring the tab into the UI, two targeted bug fixes in the icon and item-classification layers, and a single virtual hook in the tree-list control to support lazy directory expansion.
+
+### Backup tab features
+
+* Define one or more source folders to back up; the list is stored in the same registry section as other WinDirStat settings
+* Run an incremental backup pass at any time; the engine detects new, modified, relocated (renamed/moved), and unchanged files automatically
+* Browse backed-up files in a tree or flat list filtered by status: **Backed Up**, **Modified** (content changed since last backup), **Not Backed Up** (on disk but never backed up), or **Backup Only** (removed from disk but still in the backup store)
+* Restore individual files or entire directory subtrees to their original location or a chosen destination folder
+* Purge backup-only entries to reclaim space from the content store
+* Right-click any **Not Backed Up** file to open, explore, copy its path, open a terminal, inspect properties, or delete it using the same actions available in the main WinDirStat tree
+* **Sync Scan** button writes the backup source folders to WinDirStat's include filter so a rescan shows only the directories you are backing up
+* Toolbar buttons are automatically disabled when the Backup tab is active and re-enabled for relevant actions when Not Backed Up files are selected
 
 ## Description
 

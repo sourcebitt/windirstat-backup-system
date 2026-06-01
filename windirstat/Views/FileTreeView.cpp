@@ -207,6 +207,21 @@ BEGIN_MESSAGE_MAP(CFileBackupView, CControlView)
     ON_BN_CLICKED(IDC_BACKUP_FILTER_MODIFIED,   &CFileBackupView::OnChkModified)
     ON_BN_CLICKED(IDC_BACKUP_VIEW_TOGGLE,       &CFileBackupView::OnChkListView)
     ON_BN_CLICKED(IDC_BACKUP_SYNC_SCAN,         &CFileBackupView::OnBtnSyncScan)
+    // Disable main-tree toolbar commands when the backup tab is active.
+    ON_UPDATE_COMMAND_UI(ID_SCAN_RESUME,             &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_SCAN_SUSPEND,            &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_SCAN_STOP,               &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_REFRESH_ALL,             &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_REFRESH_SELECTED,        &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_SEARCH,                  &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_FILTER,                  &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_OPEN_SELECTED,   &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_EXPLORER_SELECT, &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_EDIT_COPY_CLIPBOARD,     &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_OPEN_IN_CONSOLE, &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_PROPERTIES,      &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_DELETE_BIN,      &CFileBackupView::OnUpdateDisableInBackup)
+    ON_UPDATE_COMMAND_UI(ID_CLEANUP_DELETE,          &CFileBackupView::OnUpdateDisableInBackup)
 END_MESSAGE_MAP()
 
 int CFileBackupView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
@@ -269,7 +284,7 @@ void CFileBackupView::OnSize(UINT nType, const int cx, const int cy)
     constexpr int CHK_UNB   = 148; // "Not backed up" (wider + natural gap before Modified)
     constexpr int CHK_MOD   = 100; // "Modified"
     constexpr int LST       = 90;  // "List view"
-    constexpr int BTN_SYNC  = 85;  // "Sync Scan"
+    constexpr int BTN_SYNC  = 100; // "Sync Scan"
 
     int x = PAD;
     m_searchEdit.MoveWindow(x, PAD, SRCH, H);
@@ -376,6 +391,11 @@ void CFileBackupView::OnChkListView()
     ApplyFilter();
 }
 
+void CFileBackupView::OnUpdateDisableInBackup(CCmdUI* pCmdUI)
+{
+    pCmdUI->Enable(FALSE);
+}
+
 void CFileBackupView::OnBtnSyncScan()
 {
     const auto& folders = backup::SourceFolders.Obj();
@@ -411,13 +431,10 @@ void CFileBackupView::OnBtnSyncScan()
     // Apply the updated include filter to the running scan immediately.
     CFiltering::CompileFilters();
 
-    const std::wstring msg =
-        std::to_wstring(folders.size()) + L" folder(s) written to scan settings.\n\n"
-        L"FilteringIncludeDirs  ← backup sources\n"
-        L"SelectDrivesFolder    ← backup sources\n\n"
-        L"Re-open the scan dialog (File › Open) to pick a source folder,\n"
-        L"or re-scan to apply the include filter to the current tree.";
-    AfxMessageBox(msg.c_str(), MB_ICONINFORMATION);
+    AfxMessageBox(
+        L"Backup source directories have been applied to Filtering.\n\n"
+        L"Rescan the directory tree to display only the directories selected for backup.",
+        MB_ICONINFORMATION);
 }
 
 void CFileBackupView::OnUpdate(CView* /*pSender*/, const LPARAM lHint, CObject* /*pHint*/)

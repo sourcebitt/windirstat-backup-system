@@ -149,4 +149,5 @@ protected:
     afx_msg void   OnChkModified();
     afx_msg void   OnChkListView();
     afx_msg void   OnBtnSyncScan();
+    afx_msg void   OnUpdateDisableInBackup(CCmdUI* pCmdUI);
 };

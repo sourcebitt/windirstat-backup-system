@@ -1,8 +1,10 @@
 # WinDirStat - Windows Directory Statistics
 
-## SOURCEBITT VERSION - NOT THE REGULAR WINDIRSTAT. BACKUP TAB ADDED.
+## TAKE NOTE - FILE BACKUP VERSION - NOT THE REGULAR WINDIRSTAT.
 
-This version has the ability to backup specific directories of your computer. I tried to modify the original windirstat to a minimum, so most of backup functions are within the backup tab. The only major addition is the ability to execute windirstat in the backup directories instead of a single direcotry/drive.
+This version can select for analysis a specific group of chosen directories on a computer (avoiding the need to look at system directories) and to backup this specific group of directories to a desired location in a compact format (hash based backup with an index).
+
+I tried to modify the original windirstat to a minimum, so most of backup functions are within the new backup tab.
 
 ## Description
 
